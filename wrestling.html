@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EVAA Wrestling — Board Members</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 8px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #000; background: #fff; font-size: 12px; line-height: 1.35; }
+  h1 { color: #1B4F8C; border-bottom: 2px solid #1B4F8C; padding-bottom: 6px; margin-top: 0; margin-bottom: 10px; font-size: 1.4em; font-weight: 700; }
+  table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 12px; }
+  th { background: #1B4F8C; color: #fff; text-align: left; padding: 6px 10px; font-weight: 600; font-size: 12px; cursor: pointer; user-select: none; white-space: nowrap; }
+  th:hover { background: #154070; }
+  th .arrow { display: inline-block; width: 10px; margin-left: 4px; color: #cfd8e6; }
+  th.sorted .arrow { color: #fff; }
+  td { padding: 6px 10px; border-bottom: 1px solid #e0e0e0; vertical-align: top; }
+  tr:hover td { background: #f5f8fc; }
+  a { color: #1B4F8C; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .footer { margin-top: 12px; font-size: 0.85em; color: #666; }
+</style>
+</head>
+<body>
+  <h1>EVAA Wrestling — Board Members</h1>
+  <table id="rosterTable">
+    <thead>
+      <tr>
+        <th data-col="0">Name<span class="arrow"></span></th>
+        <th data-col="1">Role<span class="arrow"></span></th>
+        <th data-col="2">Email<span class="arrow"></span></th>
+      </tr>
+    </thead>
+    <tbody>
+<tr><td>Mark Espena</td><td>Admin/Technical Support</td><td><a href="mailto:web-admin@evaasports.org">web-admin@evaasports.org</a></td></tr><tr><td>Travis Lee</td><td>Program Director</td><td><a href="mailto:tlee@evaasports.org">tlee@evaasports.org</a></td></tr><tr><td>Jud Turk</td><td>Director</td><td><a href="mailto:jturk@evaasports.org">jturk@evaasports.org</a></td></tr>
+    </tbody>
+  </table>
+  <div class="footer">Last updated: April 30, 2026</div>
+
+<script>
+(function(){var t=document.getElementById('rosterTable');if(!t)return;var hs=t.querySelectorAll('th'),tb=t.querySelector('tbody'),s={c:-1,d:1};function ct(r,c){var x=r.children[c];return(x?x.textContent:'').trim().toLowerCase();}function sb(c){if(s.c===c)s.d=-s.d;else{s.c=c;s.d=1;}var rs=[].slice.call(tb.querySelectorAll('tr'));rs.sort(function(a,b){var av=ct(a,c),bv=ct(b,c);if(av<bv)return -1*s.d;if(av>bv)return 1*s.d;return 0;});rs.forEach(function(r){tb.appendChild(r);});ua();}function ua(){hs.forEach(function(h,i){var a=h.querySelector('.arrow');h.classList.remove('sorted');if(i===s.c){h.classList.add('sorted');a.textContent=s.d===1?'\u25B2':'\u25BC';}else{a.textContent='\u25B3';}});}hs.forEach(function(h){h.addEventListener('click',function(){sb(parseInt(h.getAttribute('data-col'),10));});});ua();})();
+</script>
+</body>
+</html>
