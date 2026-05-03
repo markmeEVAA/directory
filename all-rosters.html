@@ -31,6 +31,11 @@
     align-items: center;
     margin-bottom: 8px;
   }
+  .controls label {
+    font-weight: 600;
+    color: #333;
+  }
+  .controls select,
   .controls input[type="text"] {
     font-family: inherit;
     font-size: 12px;
@@ -39,6 +44,8 @@
     border-radius: 3px;
     background: #fff;
     color: #000;
+  }
+  .controls input[type="text"] {
     flex: 1;
     min-width: 140px;
     max-width: 320px;
@@ -115,7 +122,11 @@
   <h1>EVAA — All Rosters</h1>
 
   <div class="controls">
-    <input type="text" id="searchBox" placeholder="Search name, role, email, or sport…">
+    <label for="sportFilter">Sport:</label>
+    <select id="sportFilter">
+      <option value="">All</option>
+    </select>
+    <input type="text" id="searchBox" placeholder="Search name, role, or email…">
     <span class="count" id="resultCount"></span>
   </div>
 
@@ -144,7 +155,21 @@
   var resultCount = document.getElementById('resultCount');
   var emptyMsg = document.getElementById('emptyMsg');
   var sortState = { col: -1, dir: 1 };
+  var sportFilter = document.getElementById('sportFilter');
   var allRows = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
+
+  // Build sport dropdown from col 0 (Sport is now first column)
+  var sportSet = {};
+  allRows.forEach(function (r) {
+    var s = r.children[0].textContent.trim();
+    if (s) sportSet[s] = true;
+  });
+  Object.keys(sportSet).sort().forEach(function (s) {
+    var opt = document.createElement('option');
+    opt.value = s;
+    opt.textContent = s;
+    sportFilter.appendChild(opt);
+  });
 
   function cellText(row, col) {
     var c = row.children[col];
@@ -152,16 +177,19 @@
   }
 
   function applyFilters() {
+    var sport = sportFilter.value;
     var q = searchBox.value.trim().toLowerCase();
     var visible = 0;
     allRows.forEach(function (r) {
+      var rowSport = r.children[0].textContent.trim();
+      var matchSport = !sport || rowSport === sport;
       var matchSearch = !q || (
         cellText(r, 0).indexOf(q) !== -1 ||
         cellText(r, 1).indexOf(q) !== -1 ||
         cellText(r, 2).indexOf(q) !== -1 ||
         cellText(r, 3).indexOf(q) !== -1
       );
-      if (matchSearch) {
+      if (matchSport && matchSearch) {
         r.classList.remove('hidden');
         visible++;
       } else {
@@ -210,6 +238,7 @@
     });
   });
 
+  sportFilter.addEventListener('change', applyFilters);
   searchBox.addEventListener('input', applyFilters);
 
   updateArrows();
