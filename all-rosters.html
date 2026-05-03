@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EVAA — All Rosters</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 8px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #000;
+    background: #fff;
+    font-size: 12px;
+    line-height: 1.35;
+  }
+  h1 {
+    color: #1B4F8C;
+    border-bottom: 2px solid #1B4F8C;
+    padding-bottom: 6px;
+    margin-top: 0;
+    margin-bottom: 10px;
+    font-size: 1.4em;
+    font-weight: 700;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .controls label {
+    font-weight: 600;
+    color: #333;
+  }
+  .controls select,
+  .controls input[type="text"] {
+    font-family: inherit;
+    font-size: 12px;
+    padding: 4px 8px;
+    border: 1px solid #c0c8d4;
+    border-radius: 3px;
+    background: #fff;
+    color: #000;
+  }
+  .controls input[type="text"] {
+    flex: 1;
+    min-width: 140px;
+    max-width: 320px;
+  }
+  .controls .count {
+    margin-left: auto;
+    color: #666;
+    font-size: 0.9em;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 6px;
+    font-size: 12px;
+  }
+  th {
+    background: #1B4F8C;
+    color: #fff;
+    text-align: left;
+    padding: 6px 10px;
+    font-weight: 600;
+    font-size: 12px;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+  th:hover {
+    background: #154070;
+  }
+  th .arrow {
+    display: inline-block;
+    width: 10px;
+    margin-left: 4px;
+    color: #cfd8e6;
+  }
+  th.sorted .arrow {
+    color: #fff;
+  }
+  td {
+    padding: 6px 10px;
+    border-bottom: 1px solid #e0e0e0;
+    vertical-align: top;
+  }
+  tr:hover td {
+    background: #f5f8fc;
+  }
+  tr.hidden {
+    display: none;
+  }
+  a {
+    color: #1B4F8C;
+    text-decoration: none;
+  }
+  a:hover {
+    text-decoration: underline;
+  }
+  .footer {
+    margin-top: 12px;
+    font-size: 0.85em;
+    color: #666;
+  }
+  .empty {
+    padding: 14px;
+    text-align: center;
+    color: #888;
+    border: 1px dashed #cfd5dd;
+    border-radius: 4px;
+    margin-top: 8px;
+    display: none;
+  }
+</style>
+</head>
+<body>
+  <h1>EVAA — All Rosters</h1>
+
+  <div class="controls">
+    <label for="sportFilter">Sport/Group:</label>
+    <select id="sportFilter">
+      <option value="">All</option>
+    </select>
+    <input type="text" id="searchBox" placeholder="Search name, role, or email…">
+    <span class="count" id="resultCount"></span>
+  </div>
+
+  <table id="rosterTable">
+    <thead>
+      <tr>
+        <th data-col="0">Name<span class="arrow"></span></th>
+        <th data-col="1">Role<span class="arrow"></span></th>
+        <th data-col="2">Email<span class="arrow"></span></th>
+        <th data-col="3">Sport/Group<span class="arrow"></span></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Tony Walker</td><td>Board Member</td><td><a href="mailto:twalker@evaasports.org">twalker@evaasports.org</a></td><td>Baseball</td></tr><tr><td>Josh Cinnamo</td><td>Communications</td><td><a href="mailto:jcinnamo@evaasports.org">jcinnamo@evaasports.org</a></td><td>Baseball</td></tr><tr><td>Brad Yamanaka</td><td>Asst Director, Legion Rep</td><td><a href="mailto:byamanaka@evaasports.org">byamanaka@evaasports.org</a></td><td>Baseball</td></tr><tr><td>Jeremy Frost</td><td>Program Director</td><td><a href="mailto:jfrost@evaasports.org">jfrost@evaasports.org</a></td><td>Baseball</td></tr><tr><td>Peter Lindberg</td><td>Asst Program Director</td><td><a href="mailto:plindberg@evaasports.org">plindberg@evaasports.org</a></td><td>Baseball</td></tr><tr><td>Clay Miller</td><td>Board Member</td><td><a href="mailto:cmiller@evaasports.org">cmiller@evaasports.org</a></td><td>Baseball</td></tr><tr><td>Jude Miron</td><td>President | Vice President</td><td><a href="mailto:jmiron@evaasports.org">jmiron@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Paul Tarnowski</td><td>Treasurer (outgoing)</td><td><a href="mailto:ptarnowski@evaasports.org">ptarnowski@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Erica Eggers</td><td>Girls Travel Director</td><td><a href="mailto:EEggers@evaasports.org">EEggers@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Erik Edstrom</td><td>President Elect</td><td><a href="mailto:eedstrom@evaasports.org">eedstrom@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Brad Newton</td><td>Boys Traveling Director (outgoing)</td><td><a href="mailto:bnewton@evaasports.org">bnewton@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Sue Newton</td><td></td><td><a href="mailto:snewton@evaasports.org">snewton@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Erica Sherman</td><td>Vice-President</td><td><a href="mailto:esherman@evaasports.org">esherman@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Derek Kasper</td><td>EHS Basketball Liaison</td><td><a href="mailto:dKasper@evaasports.org">dKasper@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Tami Weber</td><td>Girls Traveling Director</td><td><a href="mailto:tweber@evaasports.org">tweber@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Brian Cleaveland</td><td>Boys Traveling Co-Director</td><td><a href="mailto:BCleaveland@evaasports.org">BCleaveland@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Nate Veldman</td><td>Boys Traveling Co-Director</td><td><a href="mailto:nveldman@evaasports.org">nveldman@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Michael Peplinski</td><td>Boys Traveling Co-Director</td><td><a href="mailto:mPeplinski@evaasports.org">mPeplinski@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Christina McNulty</td><td>Co-Director - In-House</td><td><a href="mailto:cmcnulty@evaasports.org">cmcnulty@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Dan McGrath</td><td>Social Media</td><td><a href="mailto:dmcgrath@evaasports.org">dmcgrath@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Connie Webb</td><td>Observer</td><td><a href="mailto:CWebb@evaasports.org">CWebb@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Linda Dygos</td><td>Coach Development</td><td><a href="mailto:ldygos@evaasports.org">ldygos@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Jamie Swenson</td><td>Social Media</td><td><a href="mailto:jswenson@evaasports.org">jswenson@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Matt Webb</td><td>Treasurer (incoming)</td><td><a href="mailto:mwebb@evaasports.org">mwebb@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Casey Neville</td><td></td><td><a href="mailto:cneville@evaasports.org">cneville@evaasports.org</a></td><td>Football</td></tr><tr><td>Jon Woodruff</td><td>Program Director</td><td><a href="mailto:jwoodruff@evaasports.org">jwoodruff@evaasports.org</a></td><td>Football</td></tr><tr><td>Riley Peterson</td><td>Flag Football Coordinator</td><td><a href="mailto:rpeterson@evaasports.org">rpeterson@evaasports.org</a></td><td>Football</td></tr><tr><td>Jon Moynihan</td><td>Program Director</td><td><a href="mailto:jmoynihan@evaasports.org">jmoynihan@evaasports.org</a></td><td>Lacrosse</td></tr><tr><td>Joe Williams</td><td>Asst Program Director</td><td><a href="mailto:jwilliams@evaasports.org">jwilliams@evaasports.org</a></td><td>Lacrosse</td></tr><tr><td>kris.olk@vaasports.org</td><td></td><td><a href="mailto:kris.olk@vaasports.org">kris.olk@vaasports.org</a></td><td>Lacrosse</td></tr><tr><td>Peter Beaumont</td><td>President</td><td><a href="mailto:pmbeaumont@evaasports.org">pmbeaumont@evaasports.org</a></td><td>Soccer</td></tr><tr><td>John Coleman</td><td>Registrar & Tech Operations</td><td><a href="mailto:jcoleman@evaasports.org">jcoleman@evaasports.org</a></td><td>Soccer</td></tr><tr><td>Valerie Magnuson</td><td>Game and Team Operations</td><td><a href="mailto:vmagnuson@evaasports.org">vmagnuson@evaasports.org</a></td><td>Soccer</td></tr><tr><td>John Pellika</td><td>Parent Liaison | Futsal</td><td><a href="mailto:jpellika@evaasports.org">jpellika@evaasports.org</a></td><td>Soccer</td></tr><tr><td>Amanda Narog</td><td>Treasurer | Financial Aid</td><td><a href="mailto:aNarog@evaasports.org">aNarog@evaasports.org</a></td><td>Soccer</td></tr><tr><td>Michael Johnson</td><td>Program Director</td><td><a href="mailto:michael.johnson@evaasports.org">michael.johnson@evaasports.org</a></td><td>Soccer</td></tr><tr><td>Ben Kobilka</td><td>Operations | Equipment</td><td><a href="mailto:bkobilka@evaasports.org">bkobilka@evaasports.org</a></td><td>Soccer</td></tr><tr><td>Nicole Midtdahl</td><td>Marketing Director</td><td><a href="mailto:nMidtdahl@evaasports.org">nMidtdahl@evaasports.org</a></td><td>Soccer</td></tr><tr><td>Laura Ziegler</td><td>Community Engagement | Marketing</td><td><a href="mailto:lziegler@evaasports.org">lziegler@evaasports.org</a></td><td>Soccer</td></tr><tr><td>Brigid McCarthy</td><td></td><td><a href="mailto:bmccarthy@evaasports.org">bmccarthy@evaasports.org</a></td><td>Tennis</td></tr><tr><td>Bryana Klofstad</td><td>Director</td><td><a href="mailto:bklofstad@evaasports.org">bklofstad@evaasports.org</a></td><td>Tennis</td></tr><tr><td>Hannah Knudtson</td><td></td><td><a href="mailto:hKnudtson@evaasports.org">hKnudtson@evaasports.org</a></td><td>Volleyball</td></tr><tr><td>Anthony Lynch</td><td>Treasurer/Finance</td><td><a href="mailto:alynch@evaasports.org">alynch@evaasports.org</a></td><td>Volleyball</td></tr><tr><td>Lea Kanani</td><td>Co-Program Director</td><td><a href="mailto:lkanani@evaasports.org">lkanani@evaasports.org</a></td><td>Volleyball</td></tr><tr><td>Kelli Geilow</td><td>Co-Director</td><td><a href="mailto:kgeilow@evaasports.org">kgeilow@evaasports.org</a></td><td>Volleyball</td></tr><tr><td>Erica Alley</td><td>Secretary</td><td><a href="mailto:ealley@evaasports.org">ealley@evaasports.org</a></td><td>Volleyball</td></tr><tr><td>Becky Day</td><td></td><td><a href="mailto:bday@evaasports.org">bday@evaasports.org</a></td><td>Volleyball</td></tr><tr><td>Michelle Frokjer</td><td>Concessions Manager</td><td><a href="mailto:mFrokjer@evaasports.org">mFrokjer@evaasports.org</a></td><td>Volleyball</td></tr><tr><td>Janelle Lynch</td><td>Marketing & Volunteer Coordinator</td><td><a href="mailto:jLynch@evaasports.org">jLynch@evaasports.org</a></td><td>Volleyball</td></tr><tr><td>Amy Peschong</td><td>Volunteer</td><td><a href="mailto:aPeschong@evaasports.org">aPeschong@evaasports.org</a></td><td>Volleyball</td></tr><tr><td>Josh Waterman</td><td></td><td><a href="mailto:JWaterman@evaasports.org">JWaterman@evaasports.org</a></td><td>Volleyball</td></tr><tr><td>Lori Kadrlik</td><td></td><td><a href="mailto:lorik@evaasports.org">lorik@evaasports.org</a></td><td>Volleyball</td></tr><tr><td>Tania Hochhalter</td><td></td><td><a href="mailto:thochhalter@evaasports.org">thochhalter@evaasports.org</a></td><td>Volleyball</td></tr><tr><td>Travis Lee</td><td>Program Director</td><td><a href="mailto:tlee@evaasports.org">tlee@evaasports.org</a></td><td>Wrestling</td></tr><tr><td>Jud Turk</td><td>Director</td><td><a href="mailto:jturk@evaasports.org">jturk@evaasports.org</a></td><td>Wrestling</td></tr>
+    </tbody>
+  </table>
+  <div class="empty" id="emptyMsg">No matches.</div>
+  <div class="footer">Last updated: May 3, 2026</div>
+
+<script>
+(function () {
+  var table = document.getElementById('rosterTable');
+  var headers = table.querySelectorAll('th');
+  var tbody = table.querySelector('tbody');
+  var sportFilter = document.getElementById('sportFilter');
+  var searchBox = document.getElementById('searchBox');
+  var resultCount = document.getElementById('resultCount');
+  var emptyMsg = document.getElementById('emptyMsg');
+  var sortState = { col: -1, dir: 1 };
+  var allRows = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
+
+  // Build sport dropdown from data
+  var sportSet = {};
+  allRows.forEach(function (r) {
+    var s = r.children[3].textContent.trim();
+    if (s) sportSet[s] = true;
+  });
+  Object.keys(sportSet).sort().forEach(function (s) {
+    var opt = document.createElement('option');
+    opt.value = s;
+    opt.textContent = s;
+    sportFilter.appendChild(opt);
+  });
+
+  function cellText(row, col) {
+    var c = row.children[col];
+    return (c ? c.textContent : '').trim().toLowerCase();
+  }
+
+  function applyFilters() {
+    var sport = sportFilter.value;
+    var q = searchBox.value.trim().toLowerCase();
+    var visible = 0;
+    allRows.forEach(function (r) {
+      var rowSport = r.children[3].textContent.trim();
+      var matchSport = !sport || rowSport === sport;
+      var matchSearch = !q || (
+        cellText(r, 0).indexOf(q) !== -1 ||
+        cellText(r, 1).indexOf(q) !== -1 ||
+        cellText(r, 2).indexOf(q) !== -1 ||
+        cellText(r, 3).indexOf(q) !== -1
+      );
+      if (matchSport && matchSearch) {
+        r.classList.remove('hidden');
+        visible++;
+      } else {
+        r.classList.add('hidden');
+      }
+    });
+    resultCount.textContent = visible + (visible === 1 ? ' person' : ' people');
+    emptyMsg.style.display = visible === 0 ? 'block' : 'none';
+  }
+
+  function sortByColumn(col) {
+    if (sortState.col === col) {
+      sortState.dir = -sortState.dir;
+    } else {
+      sortState.col = col;
+      sortState.dir = 1;
+    }
+    var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
+    rows.sort(function (a, b) {
+      var av = cellText(a, col);
+      var bv = cellText(b, col);
+      if (av < bv) return -1 * sortState.dir;
+      if (av > bv) return  1 * sortState.dir;
+      return 0;
+    });
+    rows.forEach(function (r) { tbody.appendChild(r); });
+    updateArrows();
+  }
+
+  function updateArrows() {
+    headers.forEach(function (h, idx) {
+      var arrow = h.querySelector('.arrow');
+      h.classList.remove('sorted');
+      if (idx === sortState.col) {
+        h.classList.add('sorted');
+        arrow.textContent = sortState.dir === 1 ? '▲' : '▼';
+      } else {
+        arrow.textContent = '△';
+      }
+    });
+  }
+
+  headers.forEach(function (h) {
+    h.addEventListener('click', function () {
+      sortByColumn(parseInt(h.getAttribute('data-col'), 10));
+    });
+  });
+
+  sportFilter.addEventListener('change', applyFilters);
+  searchBox.addEventListener('input', applyFilters);
+
+  updateArrows();
+  applyFilters();
+})();
+</script>
+</body>
+</html>
