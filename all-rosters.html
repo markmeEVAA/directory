@@ -31,11 +31,6 @@
     align-items: center;
     margin-bottom: 8px;
   }
-  .controls label {
-    font-weight: 600;
-    color: #333;
-  }
-  .controls select,
   .controls input[type="text"] {
     font-family: inherit;
     font-size: 12px;
@@ -44,8 +39,6 @@
     border-radius: 3px;
     background: #fff;
     color: #000;
-  }
-  .controls input[type="text"] {
     flex: 1;
     min-width: 140px;
     max-width: 320px;
@@ -122,25 +115,21 @@
   <h1>EVAA — All Rosters</h1>
 
   <div class="controls">
-    <label for="sportFilter">Sport/Group:</label>
-    <select id="sportFilter">
-      <option value="">All</option>
-    </select>
-    <input type="text" id="searchBox" placeholder="Search name, role, or email…">
+    <input type="text" id="searchBox" placeholder="Search name, role, email, or sport…">
     <span class="count" id="resultCount"></span>
   </div>
 
   <table id="rosterTable">
     <thead>
       <tr>
-        <th data-col="0">Name<span class="arrow"></span></th>
-        <th data-col="1">Role<span class="arrow"></span></th>
-        <th data-col="2">Email<span class="arrow"></span></th>
-        <th data-col="3">Sport/Group<span class="arrow"></span></th>
+        <th data-col="0">Sport<span class="arrow"></span></th>
+        <th data-col="1">Name<span class="arrow"></span></th>
+        <th data-col="2">Role<span class="arrow"></span></th>
+        <th data-col="3">Email<span class="arrow"></span></th>
       </tr>
     </thead>
     <tbody>
-      <tr><td>Tony Walker</td><td>Board Member</td><td><a href="mailto:twalker@evaasports.org">twalker@evaasports.org</a></td><td>Baseball</td></tr><tr><td>Josh Cinnamo</td><td>Communications</td><td><a href="mailto:jcinnamo@evaasports.org">jcinnamo@evaasports.org</a></td><td>Baseball</td></tr><tr><td>Brad Yamanaka</td><td>Asst Director, Legion Rep</td><td><a href="mailto:byamanaka@evaasports.org">byamanaka@evaasports.org</a></td><td>Baseball</td></tr><tr><td>Jeremy Frost</td><td>Program Director</td><td><a href="mailto:jfrost@evaasports.org">jfrost@evaasports.org</a></td><td>Baseball</td></tr><tr><td>Peter Lindberg</td><td>Asst Program Director</td><td><a href="mailto:plindberg@evaasports.org">plindberg@evaasports.org</a></td><td>Baseball</td></tr><tr><td>Clay Miller</td><td>Board Member</td><td><a href="mailto:cmiller@evaasports.org">cmiller@evaasports.org</a></td><td>Baseball</td></tr><tr><td>Jude Miron</td><td>President | Vice President</td><td><a href="mailto:jmiron@evaasports.org">jmiron@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Paul Tarnowski</td><td>Treasurer (outgoing)</td><td><a href="mailto:ptarnowski@evaasports.org">ptarnowski@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Erica Eggers</td><td>Girls Travel Director</td><td><a href="mailto:EEggers@evaasports.org">EEggers@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Erik Edstrom</td><td>President Elect</td><td><a href="mailto:eedstrom@evaasports.org">eedstrom@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Brad Newton</td><td>Boys Traveling Director (outgoing)</td><td><a href="mailto:bnewton@evaasports.org">bnewton@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Sue Newton</td><td></td><td><a href="mailto:snewton@evaasports.org">snewton@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Erica Sherman</td><td>Vice-President</td><td><a href="mailto:esherman@evaasports.org">esherman@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Derek Kasper</td><td>EHS Basketball Liaison</td><td><a href="mailto:dKasper@evaasports.org">dKasper@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Tami Weber</td><td>Girls Traveling Director</td><td><a href="mailto:tweber@evaasports.org">tweber@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Brian Cleaveland</td><td>Boys Traveling Co-Director</td><td><a href="mailto:BCleaveland@evaasports.org">BCleaveland@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Nate Veldman</td><td>Boys Traveling Co-Director</td><td><a href="mailto:nveldman@evaasports.org">nveldman@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Michael Peplinski</td><td>Boys Traveling Co-Director</td><td><a href="mailto:mPeplinski@evaasports.org">mPeplinski@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Christina McNulty</td><td>Co-Director - In-House</td><td><a href="mailto:cmcnulty@evaasports.org">cmcnulty@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Dan McGrath</td><td>Social Media</td><td><a href="mailto:dmcgrath@evaasports.org">dmcgrath@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Connie Webb</td><td>Observer</td><td><a href="mailto:CWebb@evaasports.org">CWebb@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Linda Dygos</td><td>Coach Development</td><td><a href="mailto:ldygos@evaasports.org">ldygos@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Jamie Swenson</td><td>Social Media</td><td><a href="mailto:jswenson@evaasports.org">jswenson@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Matt Webb</td><td>Treasurer (incoming)</td><td><a href="mailto:mwebb@evaasports.org">mwebb@evaasports.org</a></td><td>Basketball</td></tr><tr><td>Casey Neville</td><td></td><td><a href="mailto:cneville@evaasports.org">cneville@evaasports.org</a></td><td>Football</td></tr><tr><td>Jon Woodruff</td><td>Program Director</td><td><a href="mailto:jwoodruff@evaasports.org">jwoodruff@evaasports.org</a></td><td>Football</td></tr><tr><td>Riley Peterson</td><td>Flag Football Coordinator</td><td><a href="mailto:rpeterson@evaasports.org">rpeterson@evaasports.org</a></td><td>Football</td></tr><tr><td>Jon Moynihan</td><td>Program Director</td><td><a href="mailto:jmoynihan@evaasports.org">jmoynihan@evaasports.org</a></td><td>Lacrosse</td></tr><tr><td>Joe Williams</td><td>Asst Program Director</td><td><a href="mailto:jwilliams@evaasports.org">jwilliams@evaasports.org</a></td><td>Lacrosse</td></tr><tr><td>kris.olk@vaasports.org</td><td></td><td><a href="mailto:kris.olk@vaasports.org">kris.olk@vaasports.org</a></td><td>Lacrosse</td></tr><tr><td>Peter Beaumont</td><td>President</td><td><a href="mailto:pmbeaumont@evaasports.org">pmbeaumont@evaasports.org</a></td><td>Soccer</td></tr><tr><td>John Coleman</td><td>Registrar & Tech Operations</td><td><a href="mailto:jcoleman@evaasports.org">jcoleman@evaasports.org</a></td><td>Soccer</td></tr><tr><td>Valerie Magnuson</td><td>Game and Team Operations</td><td><a href="mailto:vmagnuson@evaasports.org">vmagnuson@evaasports.org</a></td><td>Soccer</td></tr><tr><td>John Pellika</td><td>Parent Liaison | Futsal</td><td><a href="mailto:jpellika@evaasports.org">jpellika@evaasports.org</a></td><td>Soccer</td></tr><tr><td>Amanda Narog</td><td>Treasurer | Financial Aid</td><td><a href="mailto:aNarog@evaasports.org">aNarog@evaasports.org</a></td><td>Soccer</td></tr><tr><td>Michael Johnson</td><td>Program Director</td><td><a href="mailto:michael.johnson@evaasports.org">michael.johnson@evaasports.org</a></td><td>Soccer</td></tr><tr><td>Ben Kobilka</td><td>Operations | Equipment</td><td><a href="mailto:bkobilka@evaasports.org">bkobilka@evaasports.org</a></td><td>Soccer</td></tr><tr><td>Nicole Midtdahl</td><td>Marketing Director</td><td><a href="mailto:nMidtdahl@evaasports.org">nMidtdahl@evaasports.org</a></td><td>Soccer</td></tr><tr><td>Laura Ziegler</td><td>Community Engagement | Marketing</td><td><a href="mailto:lziegler@evaasports.org">lziegler@evaasports.org</a></td><td>Soccer</td></tr><tr><td>Brigid McCarthy</td><td></td><td><a href="mailto:bmccarthy@evaasports.org">bmccarthy@evaasports.org</a></td><td>Tennis</td></tr><tr><td>Bryana Klofstad</td><td>Director</td><td><a href="mailto:bklofstad@evaasports.org">bklofstad@evaasports.org</a></td><td>Tennis</td></tr><tr><td>Hannah Knudtson</td><td></td><td><a href="mailto:hKnudtson@evaasports.org">hKnudtson@evaasports.org</a></td><td>Volleyball</td></tr><tr><td>Anthony Lynch</td><td>Treasurer/Finance</td><td><a href="mailto:alynch@evaasports.org">alynch@evaasports.org</a></td><td>Volleyball</td></tr><tr><td>Lea Kanani</td><td>Co-Program Director</td><td><a href="mailto:lkanani@evaasports.org">lkanani@evaasports.org</a></td><td>Volleyball</td></tr><tr><td>Kelli Geilow</td><td>Co-Director</td><td><a href="mailto:kgeilow@evaasports.org">kgeilow@evaasports.org</a></td><td>Volleyball</td></tr><tr><td>Erica Alley</td><td>Secretary</td><td><a href="mailto:ealley@evaasports.org">ealley@evaasports.org</a></td><td>Volleyball</td></tr><tr><td>Becky Day</td><td></td><td><a href="mailto:bday@evaasports.org">bday@evaasports.org</a></td><td>Volleyball</td></tr><tr><td>Michelle Frokjer</td><td>Concessions Manager</td><td><a href="mailto:mFrokjer@evaasports.org">mFrokjer@evaasports.org</a></td><td>Volleyball</td></tr><tr><td>Janelle Lynch</td><td>Marketing & Volunteer Coordinator</td><td><a href="mailto:jLynch@evaasports.org">jLynch@evaasports.org</a></td><td>Volleyball</td></tr><tr><td>Amy Peschong</td><td>Volunteer</td><td><a href="mailto:aPeschong@evaasports.org">aPeschong@evaasports.org</a></td><td>Volleyball</td></tr><tr><td>Josh Waterman</td><td></td><td><a href="mailto:JWaterman@evaasports.org">JWaterman@evaasports.org</a></td><td>Volleyball</td></tr><tr><td>Lori Kadrlik</td><td></td><td><a href="mailto:lorik@evaasports.org">lorik@evaasports.org</a></td><td>Volleyball</td></tr><tr><td>Tania Hochhalter</td><td></td><td><a href="mailto:thochhalter@evaasports.org">thochhalter@evaasports.org</a></td><td>Volleyball</td></tr><tr><td>Travis Lee</td><td>Program Director</td><td><a href="mailto:tlee@evaasports.org">tlee@evaasports.org</a></td><td>Wrestling</td></tr><tr><td>Jud Turk</td><td>Director</td><td><a href="mailto:jturk@evaasports.org">jturk@evaasports.org</a></td><td>Wrestling</td></tr>
+      <tr><td>Baseball</td><td>Tony Walker</td><td>Board Member</td><td><a href="mailto:twalker@evaasports.org">twalker@evaasports.org</a></td></tr><tr><td>Baseball</td><td>Josh Cinnamo</td><td>Communications</td><td><a href="mailto:jcinnamo@evaasports.org">jcinnamo@evaasports.org</a></td></tr><tr><td>Baseball</td><td>Brad Yamanaka</td><td>Asst Director, Legion Rep</td><td><a href="mailto:byamanaka@evaasports.org">byamanaka@evaasports.org</a></td></tr><tr><td>Baseball</td><td>Jeremy Frost</td><td>Program Director</td><td><a href="mailto:jfrost@evaasports.org">jfrost@evaasports.org</a></td></tr><tr><td>Baseball</td><td>Peter Lindberg</td><td>Asst Program Director</td><td><a href="mailto:plindberg@evaasports.org">plindberg@evaasports.org</a></td></tr><tr><td>Baseball</td><td>Clay Miller</td><td>Board Member</td><td><a href="mailto:cmiller@evaasports.org">cmiller@evaasports.org</a></td></tr><tr><td>Basketball</td><td>Jude Miron</td><td>President | Vice President</td><td><a href="mailto:jmiron@evaasports.org">jmiron@evaasports.org</a></td></tr><tr><td>Basketball</td><td>Paul Tarnowski</td><td>Treasurer (outgoing)</td><td><a href="mailto:ptarnowski@evaasports.org">ptarnowski@evaasports.org</a></td></tr><tr><td>Basketball</td><td>Erica Eggers</td><td>Girls Travel Director</td><td><a href="mailto:EEggers@evaasports.org">EEggers@evaasports.org</a></td></tr><tr><td>Basketball</td><td>Erik Edstrom</td><td>President Elect</td><td><a href="mailto:eedstrom@evaasports.org">eedstrom@evaasports.org</a></td></tr><tr><td>Basketball</td><td>Brad Newton</td><td>Boys Traveling Director (outgoing)</td><td><a href="mailto:bnewton@evaasports.org">bnewton@evaasports.org</a></td></tr><tr><td>Basketball</td><td>Sue Newton</td><td></td><td><a href="mailto:snewton@evaasports.org">snewton@evaasports.org</a></td></tr><tr><td>Basketball</td><td>Erica Sherman</td><td>Vice-President</td><td><a href="mailto:esherman@evaasports.org">esherman@evaasports.org</a></td></tr><tr><td>Basketball</td><td>Derek Kasper</td><td>EHS Basketball Liaison</td><td><a href="mailto:dKasper@evaasports.org">dKasper@evaasports.org</a></td></tr><tr><td>Basketball</td><td>Tami Weber</td><td>Girls Traveling Director</td><td><a href="mailto:tweber@evaasports.org">tweber@evaasports.org</a></td></tr><tr><td>Basketball</td><td>Brian Cleaveland</td><td>Boys Traveling Co-Director</td><td><a href="mailto:BCleaveland@evaasports.org">BCleaveland@evaasports.org</a></td></tr><tr><td>Basketball</td><td>Nate Veldman</td><td>Boys Traveling Co-Director</td><td><a href="mailto:nveldman@evaasports.org">nveldman@evaasports.org</a></td></tr><tr><td>Basketball</td><td>Michael Peplinski</td><td>Boys Traveling Co-Director</td><td><a href="mailto:mPeplinski@evaasports.org">mPeplinski@evaasports.org</a></td></tr><tr><td>Basketball</td><td>Christina McNulty</td><td>Co-Director - In-House</td><td><a href="mailto:cmcnulty@evaasports.org">cmcnulty@evaasports.org</a></td></tr><tr><td>Basketball</td><td>Dan McGrath</td><td>Social Media</td><td><a href="mailto:dmcgrath@evaasports.org">dmcgrath@evaasports.org</a></td></tr><tr><td>Basketball</td><td>Connie Webb</td><td>Observer</td><td><a href="mailto:CWebb@evaasports.org">CWebb@evaasports.org</a></td></tr><tr><td>Basketball</td><td>Linda Dygos</td><td>Coach Development</td><td><a href="mailto:ldygos@evaasports.org">ldygos@evaasports.org</a></td></tr><tr><td>Basketball</td><td>Jamie Swenson</td><td>Social Media</td><td><a href="mailto:jswenson@evaasports.org">jswenson@evaasports.org</a></td></tr><tr><td>Basketball</td><td>Matt Webb</td><td>Treasurer (incoming)</td><td><a href="mailto:mwebb@evaasports.org">mwebb@evaasports.org</a></td></tr><tr><td>Football</td><td>Casey Neville</td><td></td><td><a href="mailto:cneville@evaasports.org">cneville@evaasports.org</a></td></tr><tr><td>Football</td><td>Jon Woodruff</td><td>Program Director</td><td><a href="mailto:jwoodruff@evaasports.org">jwoodruff@evaasports.org</a></td></tr><tr><td>Football</td><td>Riley Peterson</td><td>Flag Football Coordinator</td><td><a href="mailto:rpeterson@evaasports.org">rpeterson@evaasports.org</a></td></tr><tr><td>Lacrosse</td><td>Jon Moynihan</td><td>Program Director</td><td><a href="mailto:jmoynihan@evaasports.org">jmoynihan@evaasports.org</a></td></tr><tr><td>Lacrosse</td><td>Joe Williams</td><td>Asst Program Director</td><td><a href="mailto:jwilliams@evaasports.org">jwilliams@evaasports.org</a></td></tr><tr><td>Lacrosse</td><td>kris.olk@vaasports.org</td><td></td><td><a href="mailto:kris.olk@vaasports.org">kris.olk@vaasports.org</a></td></tr><tr><td>Soccer</td><td>Peter Beaumont</td><td>President</td><td><a href="mailto:pmbeaumont@evaasports.org">pmbeaumont@evaasports.org</a></td></tr><tr><td>Soccer</td><td>John Coleman</td><td>Registrar & Tech Operations</td><td><a href="mailto:jcoleman@evaasports.org">jcoleman@evaasports.org</a></td></tr><tr><td>Soccer</td><td>Valerie Magnuson</td><td>Game and Team Operations</td><td><a href="mailto:vmagnuson@evaasports.org">vmagnuson@evaasports.org</a></td></tr><tr><td>Soccer</td><td>John Pellika</td><td>Parent Liaison | Futsal</td><td><a href="mailto:jpellika@evaasports.org">jpellika@evaasports.org</a></td></tr><tr><td>Soccer</td><td>Amanda Narog</td><td>Treasurer | Financial Aid</td><td><a href="mailto:aNarog@evaasports.org">aNarog@evaasports.org</a></td></tr><tr><td>Soccer</td><td>Michael Johnson</td><td>Program Director</td><td><a href="mailto:michael.johnson@evaasports.org">michael.johnson@evaasports.org</a></td></tr><tr><td>Soccer</td><td>Ben Kobilka</td><td>Operations | Equipment</td><td><a href="mailto:bkobilka@evaasports.org">bkobilka@evaasports.org</a></td></tr><tr><td>Soccer</td><td>Nicole Midtdahl</td><td>Marketing Director</td><td><a href="mailto:nMidtdahl@evaasports.org">nMidtdahl@evaasports.org</a></td></tr><tr><td>Soccer</td><td>Laura Ziegler</td><td>Community Engagement | Marketing</td><td><a href="mailto:lziegler@evaasports.org">lziegler@evaasports.org</a></td></tr><tr><td>Tennis</td><td>Brigid McCarthy</td><td></td><td><a href="mailto:bmccarthy@evaasports.org">bmccarthy@evaasports.org</a></td></tr><tr><td>Tennis</td><td>Bryana Klofstad</td><td>Director</td><td><a href="mailto:bklofstad@evaasports.org">bklofstad@evaasports.org</a></td></tr><tr><td>Volleyball</td><td>Hannah Knudtson</td><td></td><td><a href="mailto:hKnudtson@evaasports.org">hKnudtson@evaasports.org</a></td></tr><tr><td>Volleyball</td><td>Anthony Lynch</td><td>Treasurer/Finance</td><td><a href="mailto:alynch@evaasports.org">alynch@evaasports.org</a></td></tr><tr><td>Volleyball</td><td>Lea Kanani</td><td>Co-Program Director</td><td><a href="mailto:lkanani@evaasports.org">lkanani@evaasports.org</a></td></tr><tr><td>Volleyball</td><td>Kelli Geilow</td><td>Co-Director</td><td><a href="mailto:kgeilow@evaasports.org">kgeilow@evaasports.org</a></td></tr><tr><td>Volleyball</td><td>Erica Alley</td><td>Secretary</td><td><a href="mailto:ealley@evaasports.org">ealley@evaasports.org</a></td></tr><tr><td>Volleyball</td><td>Becky Day</td><td></td><td><a href="mailto:bday@evaasports.org">bday@evaasports.org</a></td></tr><tr><td>Volleyball</td><td>Michelle Frokjer</td><td>Concessions Manager</td><td><a href="mailto:mFrokjer@evaasports.org">mFrokjer@evaasports.org</a></td></tr><tr><td>Volleyball</td><td>Janelle Lynch</td><td>Marketing & Volunteer Coordinator</td><td><a href="mailto:jLynch@evaasports.org">jLynch@evaasports.org</a></td></tr><tr><td>Volleyball</td><td>Amy Peschong</td><td>Volunteer</td><td><a href="mailto:aPeschong@evaasports.org">aPeschong@evaasports.org</a></td></tr><tr><td>Volleyball</td><td>Josh Waterman</td><td></td><td><a href="mailto:JWaterman@evaasports.org">JWaterman@evaasports.org</a></td></tr><tr><td>Volleyball</td><td>Lori Kadrlik</td><td></td><td><a href="mailto:lorik@evaasports.org">lorik@evaasports.org</a></td></tr><tr><td>Volleyball</td><td>Tania Hochhalter</td><td></td><td><a href="mailto:thochhalter@evaasports.org">thochhalter@evaasports.org</a></td></tr><tr><td>Wrestling</td><td>Travis Lee</td><td>Program Director</td><td><a href="mailto:tlee@evaasports.org">tlee@evaasports.org</a></td></tr><tr><td>Wrestling</td><td>Jud Turk</td><td>Director</td><td><a href="mailto:jturk@evaasports.org">jturk@evaasports.org</a></td></tr>
     </tbody>
   </table>
   <div class="empty" id="emptyMsg">No matches.</div>
@@ -151,25 +140,11 @@
   var table = document.getElementById('rosterTable');
   var headers = table.querySelectorAll('th');
   var tbody = table.querySelector('tbody');
-  var sportFilter = document.getElementById('sportFilter');
   var searchBox = document.getElementById('searchBox');
   var resultCount = document.getElementById('resultCount');
   var emptyMsg = document.getElementById('emptyMsg');
   var sortState = { col: -1, dir: 1 };
   var allRows = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
-
-  // Build sport dropdown from data
-  var sportSet = {};
-  allRows.forEach(function (r) {
-    var s = r.children[3].textContent.trim();
-    if (s) sportSet[s] = true;
-  });
-  Object.keys(sportSet).sort().forEach(function (s) {
-    var opt = document.createElement('option');
-    opt.value = s;
-    opt.textContent = s;
-    sportFilter.appendChild(opt);
-  });
 
   function cellText(row, col) {
     var c = row.children[col];
@@ -177,19 +152,16 @@
   }
 
   function applyFilters() {
-    var sport = sportFilter.value;
     var q = searchBox.value.trim().toLowerCase();
     var visible = 0;
     allRows.forEach(function (r) {
-      var rowSport = r.children[3].textContent.trim();
-      var matchSport = !sport || rowSport === sport;
       var matchSearch = !q || (
         cellText(r, 0).indexOf(q) !== -1 ||
         cellText(r, 1).indexOf(q) !== -1 ||
         cellText(r, 2).indexOf(q) !== -1 ||
         cellText(r, 3).indexOf(q) !== -1
       );
-      if (matchSport && matchSearch) {
+      if (matchSearch) {
         r.classList.remove('hidden');
         visible++;
       } else {
@@ -238,7 +210,6 @@
     });
   });
 
-  sportFilter.addEventListener('change', applyFilters);
   searchBox.addEventListener('input', applyFilters);
 
   updateArrows();
