@@ -75,10 +75,11 @@ const GRAPH = (() => {
     return callGraphAll(path);
   }
 
-  // List all enabled users in the EVAA + Fusion domains.
+  // List all users in the EVAA + Fusion domains (both active AND disabled).
+  // Disabled accounts are surfaced so admins can re-enable them within the recovery window.
   // Used by the Manage Members tab for the paginated all-users view.
   async function listAllManagedUsers() {
-    const filter = "accountEnabled eq true and (endswith(userPrincipalName,'@evaasports.org') or endswith(userPrincipalName,'@avfusion.org'))";
+    const filter = "endswith(userPrincipalName,'@evaasports.org') or endswith(userPrincipalName,'@avfusion.org')";
     const select = "id,displayName,mail,userPrincipalName,jobTitle,accountEnabled";
     // endswith requires advanced query, which requires ConsistencyLevel: eventual + $count
     const path = `/users?$filter=${encodeURIComponent(filter)}&$select=${select}&$count=true&$top=999`;

@@ -648,11 +648,16 @@
     if (!pageRows.length) {
       tbody.innerHTML = `<tr><td colspan="3" class="muted">No matches.</td></tr>`;
     } else {
-      tbody.innerHTML = pageRows.map((u) => `<tr data-user-id="${escapeHtml(u.id)}">
-        <td><button class="link-button" data-jump-user-id="${escapeHtml(u.id)}" data-user-name="${escapeHtml(u.displayName)}">${escapeHtml(u.displayName)}</button></td>
-        <td>${escapeHtml(u.userPrincipalName || u.mail || "")}</td>
-        <td>${escapeHtml(u.jobTitle || "")}</td>
-      </tr>`).join("");
+      tbody.innerHTML = pageRows.map((u) => {
+        const disabled = u.accountEnabled === false;
+        const disabledBadge = disabled ? ` <span class="account-state-badge state-disabled">disabled</span>` : "";
+        const rowClass = disabled ? ' class="row-disabled"' : "";
+        return `<tr${rowClass} data-user-id="${escapeHtml(u.id)}">
+          <td><button class="link-button" data-jump-user-id="${escapeHtml(u.id)}" data-user-name="${escapeHtml(u.displayName)}">${escapeHtml(u.displayName)}</button>${disabledBadge}</td>
+          <td>${escapeHtml(u.userPrincipalName || u.mail || "")}</td>
+          <td>${escapeHtml(u.jobTitle || "")}</td>
+        </tr>`;
+      }).join("");
       tbody.querySelectorAll(".link-button[data-jump-user-id]").forEach((b) => {
         b.addEventListener("click", () => openUserDetail(b.dataset.jumpUserId, { id: b.dataset.jumpUserId, displayName: b.dataset.userName }));
       });

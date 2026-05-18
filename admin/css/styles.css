@@ -746,6 +746,11 @@ td a:hover { text-decoration: underline; }
 .role-owner { background: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
 .role-both { background: #d4edda; color: #155724; }
 
+/* Visual softening for disabled-account rows in the members list */
+.row-disabled td { color: #999; }
+.row-disabled .link-button { color: #888; font-style: italic; }
+.row-disabled .link-button:hover { color: #1B4F8C; }
+
 /* In-table link buttons (cross-nav between group <-> user detail) */
 .link-button {
   background: none;
