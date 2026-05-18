@@ -6,10 +6,21 @@ const AUTH = (() => {
   const TENANT_ID = "b5897a1b-b85b-42bd-8e61-9b021b67d2ce";
   const CLIENT_ID = "74b79a84-6ea0-4c32-beae-25ed9bdc249f";
 
-  // Scopes we need to read group + member info via Graph.
-  // Group.Read.All covers reading groups + members + owners (transitive too).
-  // User.Read covers the current user's profile.
-  const SCOPES = ["User.Read", "Group.Read.All", "GroupMember.Read.All"];
+  // Scopes the admin portal needs. All must be granted (delegated) on the app reg.
+  //   User.Read                — current user profile
+  //   Group.Read.All           — list groups + members + owners
+  //   GroupMember.Read.All     — read group memberships
+  //   Group.ReadWrite.All      — add/remove members + owners
+  //   User.ReadWrite.All       — create / update / disable / enable users; assign licenses
+  //   Mail.Send                — send welcome + admin-notify emails as the signed-in user
+  const SCOPES = [
+    "User.Read",
+    "Group.Read.All",
+    "GroupMember.Read.All",
+    "Group.ReadWrite.All",
+    "User.ReadWrite.All",
+    "Mail.Send",
+  ];
 
   const msalConfig = {
     auth: {

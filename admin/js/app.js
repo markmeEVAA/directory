@@ -985,11 +985,13 @@
       banner.className = "user-state-banner banner-offboarded";
       banner.innerHTML = `
         <strong>This user has been fully offboarded.</strong>
-        Account is disabled, EVAA license removed, removed from all managed groups.
-        Exchange will permanently delete the mailbox and OneDrive within <strong>30 days</strong> of license removal (unless retention policies were configured — they aren't on this tenant).
+        Account is disabled, EVAA license is removed, and they are not in any managed groups.
+        Exchange will permanently delete the mailbox and OneDrive within <strong>30 days</strong> of when the license was removed (unless retention policies were configured — they aren't on this tenant).
         <br><br>
         <em>To recover within the 30-day window:</em> click <strong>Re-enable &amp; re-license</strong> below.
         After 30 days, the user object remains but their email + files are unrecoverable from this UI.
+        <br><br>
+        <span class="muted">Exact days-remaining isn't shown here because Graph doesn't expose the license-removal timestamp on the user object. Check Entra audit logs if you need the precise date.</span>
       `;
       banner.classList.remove("hidden");
     } else if (isPreservedData) {
