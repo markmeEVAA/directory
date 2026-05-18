@@ -148,6 +148,36 @@ const GRAPH = (() => {
     });
   }
 
+  // Create a new user via Graph. Returns the created user object including `id`.
+  async function createUser({ displayName, givenName, surname, userPrincipalName, mailNickname, jobTitle, password }) {
+    const body = {
+      accountEnabled: true,
+      displayName,
+      givenName,
+      surname,
+      mailNickname,
+      userPrincipalName,
+      usageLocation: "US",
+      passwordProfile: {
+        forceChangePasswordNextSignIn: true,
+        password,
+      },
+    };
+    if (jobTitle) body.jobTitle = jobTitle;
+    return callGraph("/users", { method: "POST", body: JSON.stringify(body) });
+  }
+
+  // Assign the EVAA license to a user.
+  async function assignUserLicense(userId, skuId = EVAA_LICENSE_SKU_ID) {
+    return callGraph(`/users/${userId}/assignLicense`, {
+      method: "POST",
+      body: JSON.stringify({
+        addLicenses: [{ skuId, disabledPlans: [] }],
+        removeLicenses: [],
+      }),
+    });
+  }
+
   return {
     getMe,
     isPortalAdmin,
@@ -161,6 +191,8 @@ const GRAPH = (() => {
     removeUserLicense,
     disableUserAccount,
     enableUserAccount,
+    createUser,
+    assignUserLicense,
     EVAA_LICENSE_SKU_ID,
   };
 })();

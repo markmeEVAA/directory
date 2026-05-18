@@ -17,6 +17,14 @@
     </div>
   </header>
 
+  <!-- Top tab nav — shown only when admin is signed in -->
+  <nav id="tab-nav" class="tab-nav hidden">
+    <div class="tab-nav-inner">
+      <button class="tab-btn active" data-tab="groups">Manage Groups</button>
+      <button class="tab-btn" data-tab="members">Manage Members</button>
+    </div>
+  </nav>
+
   <main>
     <section id="signin-view" class="view hidden">
       <div class="card">
@@ -40,6 +48,7 @@
       </div>
     </section>
 
+    <!-- ============ GROUPS TAB ============ -->
     <section id="groups-view" class="view hidden">
       <div class="toolbar">
         <input type="search" id="group-filter" placeholder="Filter groups by name…" />
@@ -101,7 +110,50 @@
       </div>
     </section>
 
-    <!-- Add Director / Add Member panel (inline, hidden by default) -->
+    <!-- ============ MEMBERS TAB ============ -->
+    <section id="members-view" class="view hidden">
+      <div class="toolbar">
+        <input type="search" id="member-search-input" placeholder="Search by name or email (min 2 chars)…" />
+        <button id="create-user-from-members-btn" class="btn-secondary">+ Create new user</button>
+      </div>
+      <div id="member-search-results-list" class="member-list">
+        <p class="muted empty-hint">Start typing to find a member, or click "+ Create new user" to onboard someone new.</p>
+      </div>
+    </section>
+
+    <section id="user-detail-view" class="view hidden">
+      <button id="back-to-members-btn" class="btn-link back-link">← Back to members</button>
+      <div class="user-detail-header">
+        <h2 id="user-detail-name"></h2>
+        <span id="user-account-state" class="account-state-badge"></span>
+      </div>
+      <p id="user-detail-mail" class="muted"></p>
+      <p id="user-detail-jobtitle" class="muted"></p>
+
+      <div class="section-header">
+        <h3>Groups <span id="user-groups-count" class="count-badge"></span></h3>
+        <div class="btn-row">
+          <button id="add-user-to-group-btn" class="btn-secondary">+ Add to group</button>
+          <button id="offboard-user-btn" class="btn-danger">Offboard fully</button>
+        </div>
+      </div>
+      <div id="user-groups-list-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Group</th>
+              <th>Email</th>
+              <th class="col-actions"></th>
+            </tr>
+          </thead>
+          <tbody id="user-groups-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============ MODALS ============ -->
+
+    <!-- Add Director / Add Member (group → user picker) -->
     <div id="add-panel" class="modal-overlay hidden">
       <div class="modal-card">
         <div class="modal-header">
@@ -110,10 +162,24 @@
         </div>
         <input type="search" id="add-search-input" placeholder="Search by name or email (min 2 chars)…" />
         <div id="add-search-results" class="search-results"></div>
+        <div class="modal-divider">— or —</div>
+        <button id="create-user-from-add-btn" class="btn-secondary">+ Create new user</button>
       </div>
     </div>
 
-    <!-- Remove confirm modal (smart prompt: per-group vs full offboard) -->
+    <!-- Add user to group (user → group picker, from members view) -->
+    <div id="add-to-group-panel" class="modal-overlay hidden">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3 id="add-to-group-title">Add to group</h3>
+          <button id="add-to-group-close" class="modal-close" aria-label="Close">×</button>
+        </div>
+        <input type="search" id="add-to-group-filter" placeholder="Filter groups…" />
+        <div id="add-to-group-results" class="search-results"></div>
+      </div>
+    </div>
+
+    <!-- Smart Remove (per-group vs full offboard) -->
     <div id="remove-panel" class="modal-overlay hidden">
       <div class="modal-card">
         <div class="modal-header">
@@ -127,6 +193,60 @@
           <button id="remove-offboard-btn" class="btn-danger">Offboard fully (license + disable account)</button>
         </div>
         <p class="muted footnote">Per-group remove unlinks just this group association. Full offboard removes from all managed groups, removes the EVAA license, and disables the account.</p>
+      </div>
+    </div>
+
+    <!-- Create New User form -->
+    <div id="create-user-panel" class="modal-overlay hidden">
+      <div class="modal-card create-user-card">
+        <div class="modal-header">
+          <h3>Create new user</h3>
+          <button id="create-user-close" class="modal-close" aria-label="Close">×</button>
+        </div>
+        <p class="muted">Creates an M365 user, assigns the EVAA license, and adds them to a group.</p>
+        <form id="create-user-form" class="create-user-form">
+          <label>
+            <span>First name *</span>
+            <input type="text" id="cu-first" required autocomplete="off" />
+          </label>
+          <label>
+            <span>Last name *</span>
+            <input type="text" id="cu-last" required autocomplete="off" />
+          </label>
+          <label>
+            <span>Personal email * <span class="hint">(for welcome / fallback contact)</span></span>
+            <input type="email" id="cu-personal-email" required autocomplete="off" />
+          </label>
+          <label>
+            <span>Email domain</span>
+            <select id="cu-domain">
+              <option value="evaasports.org">@evaasports.org</option>
+              <option value="avfusion.org">@avfusion.org</option>
+            </select>
+          </label>
+          <label>
+            <span>UPN <span class="hint">(auto from name + domain)</span></span>
+            <input type="text" id="cu-upn" placeholder="(auto-filled)" />
+          </label>
+          <label>
+            <span>Job title <span class="hint">(e.g. "Baseball: President")</span></span>
+            <input type="text" id="cu-jobtitle" placeholder="Optional" autocomplete="off" />
+          </label>
+          <label>
+            <span>Add to group *</span>
+            <select id="cu-group" required></select>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="cu-as-owner" />
+            Also make them an owner/director of this group
+          </label>
+          <div class="modal-actions">
+            <button type="button" id="create-user-cancel" class="btn-link">Cancel</button>
+            <button type="submit" id="create-user-submit" class="btn-primary">Create user</button>
+          </div>
+        </form>
+        <div id="create-user-progress" class="hidden create-user-progress"></div>
+        <div id="create-user-result" class="hidden create-user-result"></div>
       </div>
     </div>
 

@@ -11,7 +11,10 @@
     loading: $("loading-view"),
     groups: $("groups-view"),
     groupDetail: $("group-detail-view"),
+    members: $("members-view"),
+    userDetail: $("user-detail-view"),
   };
+  const tabNav = $("tab-nav");
   const userArea = $("user-area");
   const userName = $("user-name");
   const errorBanner = $("error-banner");
@@ -162,6 +165,18 @@
       if (state.sortCol === col) state.sortDir *= -1;
       else { state.sortCol = col; state.sortDir = 1; }
       renderGroupsTable();
+    });
+  });
+
+  // Wire tab nav (now that admin is confirmed and groups are loaded)
+  tabNav.classList.remove("hidden");
+  let activeTab = "groups";
+  document.querySelectorAll(".tab-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      activeTab = btn.dataset.tab;
+      document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b === btn));
+      if (activeTab === "groups") show("groups");
+      else show("members");
     });
   });
 
@@ -469,10 +484,370 @@
   }
 
   // Lightweight audit log — console for now; SharePoint AdminActionLog list is Phase 2.2.
-  function logAction(action, targetName, targetId) {
+  function logAction(action, targetName, targetId, extra) {
     const who = AUTH.getAccount()?.username || "(unknown)";
-    const group = currentDetailGroup ? `${currentDetailGroup.displayName} (${currentDetailGroup.id})` : "(unknown)";
-    const entry = { ts: new Date().toISOString(), admin: who, action, targetName, targetId, group };
+    const group = currentDetailGroup ? `${currentDetailGroup.displayName} (${currentDetailGroup.id})` : null;
+    const entry = { ts: new Date().toISOString(), admin: who, action, targetName, targetId };
+    if (group) entry.group = group;
+    if (extra) Object.assign(entry, extra);
     console.log("[AUDIT]", JSON.stringify(entry));
   }
+
+  // =====================================================================
+  // MEMBERS TAB — user search → user detail view → group membership mgmt
+  // =====================================================================
+
+  let currentDetailUser = null; // the user currently shown in user-detail-view
+  let memberSearchDebounce;
+
+  $("member-search-input").addEventListener("input", (e) => {
+    const q = e.target.value.trim();
+    clearTimeout(memberSearchDebounce);
+    const list = $("member-search-results-list");
+    if (q.length < 2) {
+      list.innerHTML = `<p class="muted empty-hint">Start typing to find a member, or click "+ Create new user" to onboard someone new.</p>`;
+      return;
+    }
+    list.innerHTML = `<p class="loading">Searching…</p>`;
+    memberSearchDebounce = setTimeout(async () => {
+      try {
+        const users = await GRAPH.searchUsers(q);
+        if (!users.length) { list.innerHTML = `<p class="muted">No users found matching "${escapeHtml(q)}".</p>`; return; }
+        list.innerHTML = users.map((u) => `<button class="user-result" data-user-id="${escapeHtml(u.id)}">
+          <span class="user-name">${escapeHtml(u.displayName)}</span>
+          <span class="user-mail muted">${escapeHtml(u.mail || u.userPrincipalName || "")}</span>
+          <span class="user-jobtitle muted">${escapeHtml(u.jobTitle || "")}</span>
+        </button>`).join("");
+        list.querySelectorAll(".user-result").forEach((btn) => {
+          btn.addEventListener("click", () => openUserDetail(btn.dataset.userId, users.find((u) => u.id === btn.dataset.userId)));
+        });
+      } catch (err) {
+        showError("Search failed: " + err.message);
+      }
+    }, 250);
+  });
+
+  async function openUserDetail(userId, userCache) {
+    show("userDetail");
+    $("user-detail-name").textContent = (userCache && userCache.displayName) || "Loading…";
+    $("user-detail-mail").textContent = "";
+    $("user-detail-jobtitle").textContent = "";
+    $("user-account-state").textContent = "";
+    $("user-account-state").className = "account-state-badge";
+    $("user-groups-tbody").innerHTML = `<tr><td colspan="3" class="loading">Loading…</td></tr>`;
+    $("user-groups-count").textContent = "";
+
+    try {
+      const [fullUser, userGroups] = await Promise.all([
+        fetchUserBasic(userId),
+        GRAPH.getUserMemberOf(userId),
+      ]);
+      currentDetailUser = fullUser;
+      renderUserDetail(fullUser, userGroups);
+    } catch (err) {
+      showError("Failed to load user: " + err.message);
+    }
+  }
+
+  async function fetchUserBasic(userId) {
+    const token = await AUTH.getToken();
+    const resp = await fetch(`https://graph.microsoft.com/v1.0/users/${userId}?$select=id,displayName,mail,userPrincipalName,jobTitle,accountEnabled`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!resp.ok) throw new Error(`Graph ${resp.status}`);
+    return resp.json();
+  }
+
+  function renderUserDetail(user, userGroups) {
+    $("user-detail-name").textContent = user.displayName || "(no name)";
+    $("user-detail-mail").innerHTML = user.mail ? `<a href="mailto:${escapeHtml(user.mail)}">${escapeHtml(user.mail)}</a> · UPN: ${escapeHtml(user.userPrincipalName || "")}` : escapeHtml(user.userPrincipalName || "");
+    $("user-detail-jobtitle").textContent = user.jobTitle ? `Role: ${user.jobTitle}` : "(no jobTitle set)";
+
+    const stateBadge = $("user-account-state");
+    if (user.accountEnabled === false) {
+      stateBadge.textContent = "Disabled";
+      stateBadge.className = "account-state-badge state-disabled";
+    } else {
+      stateBadge.textContent = "Active";
+      stateBadge.className = "account-state-badge state-active";
+    }
+
+    // Filter user's groups to MANAGED ones (EVAA/Fusion Unified) — the only ones admin actions apply to
+    const managedIds = new Set(state.groups.map((g) => g.id));
+    const managed = (userGroups || []).filter((g) => managedIds.has(g.id));
+    $("user-groups-count").textContent = managed.length;
+
+    const tbody = $("user-groups-tbody");
+    if (!managed.length) {
+      tbody.innerHTML = `<tr><td colspan="3" class="muted">Not a member of any managed EVAA/Fusion groups.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = managed.map((g) => `<tr>
+      <td>${escapeHtml(g.displayName)}</td>
+      <td>${g.mail ? `<a href="mailto:${escapeHtml(g.mail)}">${escapeHtml(g.mail)}</a>` : `<span class="muted">—</span>`}</td>
+      <td class="row-actions"><button class="btn-remove" data-group-id="${escapeHtml(g.id)}" data-group-name="${escapeHtml(g.displayName)}" aria-label="Remove from group">×</button></td>
+    </tr>`).join("");
+
+    tbody.querySelectorAll(".btn-remove").forEach((btn) => {
+      btn.addEventListener("click", () => removeUserFromGroup(btn.dataset.groupId, btn.dataset.groupName, btn));
+    });
+  }
+
+  async function removeUserFromGroup(groupId, groupName, btn) {
+    if (!currentDetailUser) return;
+    if (!confirm(`Remove ${currentDetailUser.displayName} from "${groupName}"?\n\nThis removes only this group association — the user's account, license, and other groups are untouched.`)) return;
+    btn.disabled = true; btn.textContent = "…";
+    try {
+      // Try member first, then owner (don't know which they are)
+      try { await GRAPH.removeMember(groupId, currentDetailUser.id); }
+      catch (_) { await GRAPH.removeOwner(groupId, currentDetailUser.id); }
+      logAction("removed user from group (members view)", currentDetailUser.displayName, currentDetailUser.id, { group: groupName });
+      await refreshUserDetail();
+    } catch (err) {
+      btn.disabled = false; btn.textContent = "×";
+      showError(`Failed: ${err.message}`);
+    }
+  }
+
+  async function refreshUserDetail() {
+    if (!currentDetailUser) return;
+    const groups = await GRAPH.getUserMemberOf(currentDetailUser.id);
+    const fullUser = await fetchUserBasic(currentDetailUser.id);
+    currentDetailUser = fullUser;
+    renderUserDetail(fullUser, groups);
+  }
+
+  $("back-to-members-btn").addEventListener("click", () => {
+    currentDetailUser = null;
+    show("members");
+  });
+
+  // Add to group (from user detail)
+  $("add-user-to-group-btn").addEventListener("click", () => {
+    if (!currentDetailUser) return;
+    $("add-to-group-title").textContent = `Add ${currentDetailUser.displayName} to group`;
+    $("add-to-group-filter").value = "";
+    renderAddToGroupResults("");
+    $("add-to-group-panel").classList.remove("hidden");
+    $("add-to-group-filter").focus();
+  });
+  $("add-to-group-close").addEventListener("click", () => $("add-to-group-panel").classList.add("hidden"));
+  $("add-to-group-filter").addEventListener("input", (e) => renderAddToGroupResults(e.target.value));
+
+  function renderAddToGroupResults(filter) {
+    const f = (filter || "").toLowerCase();
+    const filtered = state.groups
+      .filter((g) => (g.displayName || "").toLowerCase().includes(f))
+      .sort((a, b) => (a.displayName || "").localeCompare(b.displayName || ""));
+    const container = $("add-to-group-results");
+    if (!filtered.length) { container.innerHTML = `<p class="muted">No groups match.</p>`; return; }
+    container.innerHTML = filtered.map((g) => `<button class="user-result" data-group-id="${escapeHtml(g.id)}" data-group-name="${escapeHtml(g.displayName)}">
+      <span class="user-name">${escapeHtml(g.displayName)}</span>
+      <span class="user-mail muted">${escapeHtml(g.mail || "")}</span>
+    </button>`).join("");
+    container.querySelectorAll(".user-result").forEach((btn) => {
+      btn.addEventListener("click", () => addUserToPickedGroup(btn.dataset.groupId, btn.dataset.groupName));
+    });
+  }
+
+  async function addUserToPickedGroup(groupId, groupName) {
+    if (!currentDetailUser) return;
+    if (!confirm(`Add ${currentDetailUser.displayName} to "${groupName}" as a member?`)) return;
+    try {
+      await GRAPH.addMember(groupId, currentDetailUser.id);
+      logAction("added user to group (members view)", currentDetailUser.displayName, currentDetailUser.id, { group: groupName });
+      $("add-to-group-panel").classList.add("hidden");
+      await refreshUserDetail();
+    } catch (err) {
+      showError(`Failed to add to group: ${err.message}`);
+    }
+  }
+
+  // Offboard user (from user detail view)
+  $("offboard-user-btn").addEventListener("click", async () => {
+    if (!currentDetailUser) return;
+    const u = currentDetailUser;
+    const groups = await GRAPH.getUserMemberOf(u.id).catch(() => []);
+    const managedIds = new Set(state.groups.map((g) => g.id));
+    const managedGroups = groups.filter((g) => managedIds.has(g.id));
+
+    const msg = `Offboard ${u.displayName} fully?\n\nThis will:\n  • Remove from ${managedGroups.length} managed group(s)\n  • Remove the EVAA license\n  • Disable the account\n\nThis cannot be undone via this UI.`;
+    if (!confirm(msg)) return;
+
+    const errors = [];
+    for (const g of managedGroups) {
+      try { await GRAPH.removeMember(g.id, u.id); }
+      catch (_) { try { await GRAPH.removeOwner(g.id, u.id); } catch (e) { errors.push(`${g.displayName}: ${e.message}`); } }
+    }
+    try { await GRAPH.removeUserLicense(u.id); } catch (e) { errors.push(`license: ${e.message}`); }
+    try { await GRAPH.disableUserAccount(u.id); } catch (e) { errors.push(`disable: ${e.message}`); }
+    logAction("offboarded user fully (members view)", u.displayName, u.id);
+    if (errors.length) showError(`Offboard partial: ${errors.join("; ")}`);
+    await refreshUserDetail();
+  });
+
+  // =====================================================================
+  // CREATE NEW USER — shared modal, invoked from both Add Member modal and Members view
+  // =====================================================================
+
+  // Generate a secure-ish random temp password meeting M365 complexity requirements.
+  function generateTempPassword() {
+    const upper = "ABCDEFGHJKMNPQRSTUVWXYZ";
+    const lower = "abcdefghjkmnpqrstuvwxyz";
+    const digit = "23456789";
+    const sym = "!@#$%&*";
+    const all = upper + lower + digit + sym;
+    const rand = (s) => s[Math.floor(Math.random() * s.length)];
+    const chars = [rand(upper), rand(lower), rand(digit), rand(sym)];
+    for (let i = chars.length; i < 14; i++) chars.push(rand(all));
+    // shuffle
+    for (let i = chars.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [chars[i], chars[j]] = [chars[j], chars[i]];
+    }
+    return chars.join("");
+  }
+
+  // Source-context: which group should the new user be added to by default?
+  let createUserContextGroupId = null;
+
+  function openCreateUserPanel(presetGroupId) {
+    createUserContextGroupId = presetGroupId || null;
+    // Reset form
+    $("create-user-form").reset();
+    $("cu-domain").value = "evaasports.org";
+    $("cu-upn").value = "";
+    // Populate group dropdown
+    const sel = $("cu-group");
+    sel.innerHTML = state.groups
+      .slice()
+      .sort((a, b) => (a.displayName || "").localeCompare(b.displayName || ""))
+      .map((g) => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.displayName)}</option>`)
+      .join("");
+    if (presetGroupId) sel.value = presetGroupId;
+    $("create-user-progress").classList.add("hidden");
+    $("create-user-result").classList.add("hidden");
+    $("create-user-form").classList.remove("hidden");
+    $("create-user-panel").classList.remove("hidden");
+    $("cu-first").focus();
+  }
+  function closeCreateUserPanel() {
+    createUserContextGroupId = null;
+    $("create-user-panel").classList.add("hidden");
+  }
+  $("create-user-close").addEventListener("click", closeCreateUserPanel);
+  $("create-user-cancel").addEventListener("click", closeCreateUserPanel);
+
+  // Hook into both entry points
+  $("create-user-from-add-btn").addEventListener("click", () => {
+    closeAddPanel();
+    openCreateUserPanel(currentDetailGroup ? currentDetailGroup.id : null);
+  });
+  $("create-user-from-members-btn").addEventListener("click", () => openCreateUserPanel(null));
+
+  // Auto-fill UPN from first/last/domain unless user manually edited
+  let upnDirty = false;
+  $("cu-upn").addEventListener("input", () => { upnDirty = true; });
+  function recomputeUpn() {
+    if (upnDirty) return;
+    const first = $("cu-first").value.trim().toLowerCase().replace(/[^a-z]/g, "");
+    const last = $("cu-last").value.trim().toLowerCase().replace(/[^a-z]/g, "");
+    const domain = $("cu-domain").value;
+    if (first && last) $("cu-upn").value = `${first.charAt(0)}${last}@${domain}`;
+  }
+  $("cu-first").addEventListener("input", recomputeUpn);
+  $("cu-last").addEventListener("input", recomputeUpn);
+  $("cu-domain").addEventListener("change", recomputeUpn);
+
+  $("create-user-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const first = $("cu-first").value.trim();
+    const last = $("cu-last").value.trim();
+    const personalEmail = $("cu-personal-email").value.trim();
+    const domain = $("cu-domain").value;
+    const upn = $("cu-upn").value.trim() || `${first.charAt(0).toLowerCase()}${last.toLowerCase()}@${domain}`;
+    const mailNickname = upn.split("@")[0];
+    const jobTitle = $("cu-jobtitle").value.trim();
+    const groupId = $("cu-group").value;
+    const asOwner = $("cu-as-owner").checked;
+    const groupName = state.groups.find((g) => g.id === groupId)?.displayName || "";
+    const password = generateTempPassword();
+
+    const form = $("create-user-form");
+    const progress = $("create-user-progress");
+    const result = $("create-user-result");
+    form.classList.add("hidden");
+    progress.classList.remove("hidden");
+    progress.innerHTML = `<p class="loading">Creating ${escapeHtml(first)} ${escapeHtml(last)}…</p><ul id="cu-steps"></ul>`;
+    const stepsEl = $("cu-steps");
+    const stepLog = (msg, ok) => { stepsEl.insertAdjacentHTML("beforeend", `<li class="${ok ? 'step-ok' : 'step-err'}">${ok ? '✓' : '✗'} ${escapeHtml(msg)}</li>`); };
+
+    let newUserId;
+    try {
+      const created = await GRAPH.createUser({
+        displayName: `${first} ${last}`,
+        givenName: first,
+        surname: last,
+        userPrincipalName: upn,
+        mailNickname,
+        jobTitle: jobTitle || undefined,
+        password,
+      });
+      newUserId = created.id;
+      stepLog(`User created (${upn})`, true);
+    } catch (err) {
+      stepLog(`Create user failed: ${err.message}`, false);
+      // Show retry option by re-enabling form
+      progress.classList.add("hidden");
+      form.classList.remove("hidden");
+      showError(`User creation failed: ${err.message}`);
+      return;
+    }
+
+    // 2. Assign license (best-effort)
+    try {
+      await GRAPH.assignUserLicense(newUserId);
+      stepLog(`Assigned EVAA license`, true);
+    } catch (err) {
+      stepLog(`License assign failed: ${err.message}`, false);
+    }
+
+    // 3. Add to group
+    try {
+      if (asOwner) await GRAPH.addOwner(groupId, newUserId);
+      await GRAPH.addMember(groupId, newUserId);
+      stepLog(`Added to ${groupName}${asOwner ? " (as owner + member)" : ""}`, true);
+    } catch (err) {
+      stepLog(`Group add failed: ${err.message}`, false);
+    }
+
+    logAction("created user", `${first} ${last}`, newUserId, { upn, group: groupName, asOwner });
+
+    // 4. Show result + temp password for admin to communicate
+    progress.classList.add("hidden");
+    result.classList.remove("hidden");
+    result.innerHTML = `<h4>✓ User created</h4>
+      <p>Send these credentials to <strong>${escapeHtml(personalEmail)}</strong>:</p>
+      <div class="cred-block">
+        <div><strong>Sign-in:</strong> <code>${escapeHtml(upn)}</code></div>
+        <div><strong>Temporary password:</strong> <code id="cu-pwd">${escapeHtml(password)}</code> <button id="cu-copy-pwd" class="btn-link">Copy</button></div>
+        <div class="muted">User must change password on first sign-in.</div>
+      </div>
+      <p class="muted">Phase 2.3 will send the welcome email automatically. For now, please email these credentials manually.</p>
+      <div class="modal-actions">
+        <button id="cu-done" class="btn-primary">Done</button>
+      </div>`;
+    $("cu-copy-pwd").addEventListener("click", () => {
+      navigator.clipboard.writeText(password).then(() => {
+        $("cu-copy-pwd").textContent = "Copied!";
+        setTimeout(() => { const el = document.getElementById("cu-copy-pwd"); if (el) el.textContent = "Copy"; }, 1500);
+      });
+    });
+    $("cu-done").addEventListener("click", () => {
+      closeCreateUserPanel();
+      // Refresh whichever view is active
+      if (activeTab === "groups" && currentDetailGroup) refreshDetail();
+      else if (activeTab === "members" && currentDetailUser) refreshUserDetail();
+    });
+  });
 })();
