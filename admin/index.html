@@ -64,7 +64,10 @@
       <h2 id="group-detail-name"></h2>
       <p id="group-detail-mail" class="muted"></p>
 
-      <h3>Directors / Owners <span id="owners-count" class="count-badge"></span></h3>
+      <div class="section-header">
+        <h3>Directors / Owners <span id="owners-count" class="count-badge"></span></h3>
+        <button id="add-owner-btn" class="btn-secondary">+ Add Director</button>
+      </div>
       <div id="owners-list-container">
         <table>
           <thead>
@@ -72,13 +75,17 @@
               <th>Name</th>
               <th>Role</th>
               <th>Email</th>
+              <th class="col-actions"></th>
             </tr>
           </thead>
           <tbody id="owners-tbody"></tbody>
         </table>
       </div>
 
-      <h3>Members <span id="members-count" class="count-badge"></span></h3>
+      <div class="section-header">
+        <h3>Members <span id="members-count" class="count-badge"></span></h3>
+        <button id="add-member-btn" class="btn-secondary">+ Add Member</button>
+      </div>
       <div id="members-list-container">
         <table>
           <thead>
@@ -86,12 +93,25 @@
               <th>Name</th>
               <th>Role</th>
               <th>Email</th>
+              <th class="col-actions"></th>
             </tr>
           </thead>
           <tbody id="members-tbody"></tbody>
         </table>
       </div>
     </section>
+
+    <!-- Add Director / Add Member panel (inline, hidden by default) -->
+    <div id="add-panel" class="modal-overlay hidden">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3 id="add-panel-title">Add user</h3>
+          <button id="add-panel-close" class="modal-close" aria-label="Close">×</button>
+        </div>
+        <input type="search" id="add-search-input" placeholder="Search by name or email (min 2 chars)…" />
+        <div id="add-search-results" class="search-results"></div>
+      </div>
+    </div>
 
     <div id="error-banner" class="error-banner hidden">
       <span id="error-text"></span>

@@ -75,11 +75,52 @@ const GRAPH = (() => {
     return callGraphAll(path);
   }
 
+  // User search (for picking someone to add as owner/member).
+  // Filters to enabled users in @evaasports.org and @avfusion.org.
+  async function searchUsers(query) {
+    if (!query || query.length < 2) return [];
+    const safe = query.replace(/'/g, "''");
+    const filter = `accountEnabled eq true and (startswith(displayName,'${safe}') or startswith(mail,'${safe}') or startswith(userPrincipalName,'${safe}'))`;
+    const select = "id,displayName,mail,userPrincipalName,jobTitle";
+    const path = `/users?$filter=${encodeURIComponent(filter)}&$select=${select}&$top=15`;
+    const r = await callGraph(path);
+    return r.value || [];
+  }
+
+  // Owner ops
+  async function addOwner(groupId, userId) {
+    return callGraph(`/groups/${groupId}/owners/$ref`, {
+      method: "POST",
+      body: JSON.stringify({
+        "@odata.id": `https://graph.microsoft.com/v1.0/directoryObjects/${userId}`,
+      }),
+    });
+  }
+  async function removeOwner(groupId, userId) {
+    return callGraph(`/groups/${groupId}/owners/${userId}/$ref`, { method: "DELETE" });
+  }
+
+  // Member ops
+  async function addMember(groupId, userId) {
+    return callGraph(`/groups/${groupId}/members/$ref`, {
+      method: "POST",
+      body: JSON.stringify({
+        "@odata.id": `https://graph.microsoft.com/v1.0/directoryObjects/${userId}`,
+      }),
+    });
+  }
+  async function removeMember(groupId, userId) {
+    return callGraph(`/groups/${groupId}/members/${userId}/$ref`, { method: "DELETE" });
+  }
+
   return {
     getMe,
     isPortalAdmin,
     listManagedGroups,
     listGroupMembers,
     listGroupOwners,
+    searchUsers,
+    addOwner, removeOwner,
+    addMember, removeMember,
   };
 })();

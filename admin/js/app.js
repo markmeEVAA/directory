@@ -191,44 +191,168 @@
     }
   }
 
-  // Detail view
+  // Detail view — also caches current group ID for the add/remove handlers
+  let currentDetailGroup = null;
+
   async function openGroupDetail(groupId) {
     const g = state.groups.find((x) => x.id === groupId);
     if (!g) return;
+    currentDetailGroup = g;
     $("group-detail-name").textContent = g.displayName || "Group";
     $("group-detail-mail").textContent = g.mail || "";
-    $("owners-tbody").innerHTML = `<tr><td colspan="3" class="loading">Loading…</td></tr>`;
-    $("members-tbody").innerHTML = `<tr><td colspan="3" class="loading">Loading…</td></tr>`;
+    $("owners-tbody").innerHTML = `<tr><td colspan="4" class="loading">Loading…</td></tr>`;
+    $("members-tbody").innerHTML = `<tr><td colspan="4" class="loading">Loading…</td></tr>`;
     $("owners-count").textContent = "";
     $("members-count").textContent = "";
     show("groupDetail");
+    await refreshDetail();
+  }
 
+  async function refreshDetail() {
+    if (!currentDetailGroup) return;
     try {
       const [owners, members] = await Promise.all([
-        GRAPH.listGroupOwners(groupId),
-        GRAPH.listGroupMembers(groupId),
+        GRAPH.listGroupOwners(currentDetailGroup.id),
+        GRAPH.listGroupMembers(currentDetailGroup.id),
       ]);
       $("owners-count").textContent = owners.length;
       $("members-count").textContent = members.length;
-      $("owners-tbody").innerHTML = renderPeopleRows(owners, "no directors assigned");
-      $("members-tbody").innerHTML = renderPeopleRows(members, "no members");
+      $("owners-tbody").innerHTML = renderPeopleRows(owners, "no directors assigned", "owner");
+      $("members-tbody").innerHTML = renderPeopleRows(members, "no members", "member");
+      // Update the cached owner count in the groups list too
+      state.ownerCounts.set(currentDetailGroup.id, owners.length);
     } catch (err) {
       showError("Failed to load group detail: " + err.message);
     }
   }
 
-  function renderPeopleRows(people, emptyMsg) {
+  function renderPeopleRows(people, emptyMsg, role) {
     if (!people || people.length === 0) {
-      return `<tr><td colspan="3" class="muted">${escapeHtml(emptyMsg)}</td></tr>`;
+      return `<tr><td colspan="4" class="muted">${escapeHtml(emptyMsg)}</td></tr>`;
     }
     return people.map((p) => `<tr>
       <td>${escapeHtml(p.displayName)}</td>
       <td>${escapeHtml(p.jobTitle || "")}</td>
       <td>${p.mail ? `<a href="mailto:${escapeHtml(p.mail)}">${escapeHtml(p.mail)}</a>` : `<span class="muted">—</span>`}</td>
+      <td class="row-actions"><button class="btn-remove" data-user-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.displayName)}" data-role="${role}" aria-label="Remove">×</button></td>
     </tr>`).join("");
   }
 
   $("back-to-groups-btn").addEventListener("click", () => {
     show("groups");
+    renderGroupsTable(); // refresh cached owner counts that may have changed
   });
+
+  // ---- Phase 2.1: Add/Remove directors + members ----
+
+  // Delegated remove handler (event delegation on tbodies)
+  function wireRemoveHandlers() {
+    ["owners-tbody", "members-tbody"].forEach((id) => {
+      $(id).addEventListener("click", async (e) => {
+        const btn = e.target.closest(".btn-remove");
+        if (!btn) return;
+        const userId = btn.dataset.userId;
+        const userName = btn.dataset.name;
+        const role = btn.dataset.role; // "owner" or "member"
+        if (!currentDetailGroup || !userId) return;
+
+        const label = role === "owner" ? "director (owner)" : "member";
+        if (!confirm(`Remove ${userName} as ${label} of "${currentDetailGroup.displayName}"?\n\nThis removes only this group association — the user's account and other group memberships are untouched.`)) return;
+
+        btn.disabled = true;
+        btn.textContent = "…";
+        try {
+          if (role === "owner") {
+            await GRAPH.removeOwner(currentDetailGroup.id, userId);
+          } else {
+            await GRAPH.removeMember(currentDetailGroup.id, userId);
+          }
+          logAction(`removed ${role}`, userName, userId);
+          await refreshDetail();
+        } catch (err) {
+          btn.disabled = false;
+          btn.textContent = "×";
+          showError(`Failed to remove ${userName}: ${err.message}`);
+        }
+      });
+    });
+  }
+  wireRemoveHandlers();
+
+  // Add Director / Add Member — opens inline search panel
+  let addTarget = null; // "owner" or "member"
+
+  function openAddPanel(role) {
+    if (!currentDetailGroup) return;
+    addTarget = role;
+    const label = role === "owner" ? "director" : "member";
+    $("add-panel-title").textContent = `Add ${label} to "${currentDetailGroup.displayName}"`;
+    $("add-search-input").value = "";
+    $("add-search-results").innerHTML = "";
+    $("add-panel").classList.remove("hidden");
+    $("add-search-input").focus();
+  }
+
+  function closeAddPanel() {
+    addTarget = null;
+    $("add-panel").classList.add("hidden");
+  }
+
+  $("add-owner-btn").addEventListener("click", () => openAddPanel("owner"));
+  $("add-member-btn").addEventListener("click", () => openAddPanel("member"));
+  $("add-panel-close").addEventListener("click", closeAddPanel);
+
+  let searchDebounce;
+  $("add-search-input").addEventListener("input", (e) => {
+    const q = e.target.value.trim();
+    clearTimeout(searchDebounce);
+    if (q.length < 2) { $("add-search-results").innerHTML = ""; return; }
+    searchDebounce = setTimeout(async () => {
+      try {
+        const users = await GRAPH.searchUsers(q);
+        renderUserSearchResults(users);
+      } catch (err) {
+        showError("Search failed: " + err.message);
+      }
+    }, 250);
+  });
+
+  function renderUserSearchResults(users) {
+    const container = $("add-search-results");
+    if (!users.length) { container.innerHTML = `<p class="muted">No users found.</p>`; return; }
+    container.innerHTML = users.map((u) => `<button class="user-result" data-user-id="${escapeHtml(u.id)}" data-name="${escapeHtml(u.displayName)}">
+      <span class="user-name">${escapeHtml(u.displayName)}</span>
+      <span class="user-mail muted">${escapeHtml(u.mail || u.userPrincipalName || "")}</span>
+    </button>`).join("");
+    container.querySelectorAll(".user-result").forEach((btn) => {
+      btn.addEventListener("click", () => addPickedUser(btn.dataset.userId, btn.dataset.name));
+    });
+  }
+
+  async function addPickedUser(userId, userName) {
+    if (!currentDetailGroup || !addTarget) return;
+    const label = addTarget === "owner" ? "director (owner)" : "member";
+    if (!confirm(`Add ${userName} as ${label} of "${currentDetailGroup.displayName}"?`)) return;
+
+    try {
+      if (addTarget === "owner") {
+        await GRAPH.addOwner(currentDetailGroup.id, userId);
+      } else {
+        await GRAPH.addMember(currentDetailGroup.id, userId);
+      }
+      logAction(`added ${addTarget}`, userName, userId);
+      closeAddPanel();
+      await refreshDetail();
+    } catch (err) {
+      showError(`Failed to add ${userName}: ${err.message}`);
+    }
+  }
+
+  // Lightweight audit log — console for now; SharePoint AdminActionLog list is Phase 2.2.
+  function logAction(action, targetName, targetId) {
+    const who = AUTH.getAccount()?.username || "(unknown)";
+    const group = currentDetailGroup ? `${currentDetailGroup.displayName} (${currentDetailGroup.id})` : "(unknown)";
+    const entry = { ts: new Date().toISOString(), admin: who, action, targetName, targetId, group };
+    console.log("[AUDIT]", JSON.stringify(entry));
+  }
 })();
