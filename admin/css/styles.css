@@ -437,6 +437,29 @@ td a:hover { text-decoration: underline; }
 .btn-danger:hover { background: #a33; }
 .btn-danger:disabled { opacity: 0.5; cursor: wait; }
 
+.btn-warning {
+  background: #fff;
+  color: #856404;
+  border: 1px solid #856404;
+  padding: 6px 14px;
+  border-radius: 4px;
+  font-size: 0.9em;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.btn-warning:hover { background: #856404; color: #fff; }
+.btn-warning:disabled { opacity: 0.5; cursor: wait; }
+
+.modal-actions-stack {
+  flex-direction: column;
+  align-items: stretch;
+}
+.modal-actions-stack button {
+  width: 100%;
+  text-align: center;
+}
+
 .modal-actions {
   display: flex;
   gap: 8px;

@@ -364,6 +364,73 @@
     }
   });
 
+  // "Disable account only (preserve data)" — middle option.
+  // Removes from all managed groups, disables account, KEEPS the license so mailbox/OneDrive
+  // stay preserved indefinitely. Emails portaladmins@ so the group can decide what to do next.
+  $("remove-preserve-btn").addEventListener("click", async () => {
+    if (!pendingRemove || !currentDetailGroup) return;
+    const { userId, userName, otherManagedGroups } = pendingRemove;
+    const confirmMsg = `Disable ${userName}'s account and preserve their data?\n\nThis will:\n  • Remove from this group + ${otherManagedGroups.length} other managed group(s)\n  • Disable the account (can't sign in)\n  • KEEP the EVAA license (mailbox + OneDrive preserved indefinitely)\n  • Email portaladmins@evaasports.org with a summary\n\nLicense cost (~$3/mo) continues until you fully offboard.`;
+    if (!confirm(confirmMsg)) return;
+
+    $("remove-this-group-btn").disabled = true;
+    $("remove-preserve-btn").disabled = true;
+    $("remove-offboard-btn").disabled = true;
+    const errors = [];
+
+    try {
+      // 1. Remove from this group
+      try {
+        if (pendingRemove.role === "owner") await GRAPH.removeOwner(currentDetailGroup.id, userId);
+        else await GRAPH.removeMember(currentDetailGroup.id, userId);
+      } catch (err) { errors.push(`current group: ${err.message}`); }
+
+      // 2. Remove from other managed groups (member + owner; whichever applies)
+      for (const g of otherManagedGroups) {
+        try { await GRAPH.removeMember(g.id, userId); }
+        catch (_) {
+          try { await GRAPH.removeOwner(g.id, userId); }
+          catch (e) { errors.push(`${g.displayName}: ${e.message}`); }
+        }
+      }
+
+      // 3. Disable the account (but do NOT remove license)
+      try { await GRAPH.disableUserAccount(userId); }
+      catch (err) { errors.push(`disable: ${err.message}`); }
+
+      // 4. Notify portal admins by email
+      try {
+        const adminMail = AUTH.getAccount()?.username || "(unknown admin)";
+        const adminName = AUTH.getAccount()?.name || adminMail;
+        const groupContextName = currentDetailGroup.displayName;
+        const removedGroupList = [{ displayName: groupContextName }, ...otherManagedGroups]
+          .map((g) => `<li>${escapeHtml(g.displayName)}</li>`).join("");
+        const html = buildPreserveDataAdminEmailHtml({
+          adminName, adminMail, userName, userId,
+          groupContextName, removedGroupsHtml: removedGroupList,
+        });
+        await GRAPH.sendMail(
+          ["portaladmins@evaasports.org"],
+          `[EVAA Admin] ${userName} disabled — data preserved`,
+          html,
+        );
+      } catch (err) {
+        errors.push(`admin notify email: ${err.message}`);
+      }
+
+      logAction("disabled user with data preserved", userName, userId, { groupCount: otherManagedGroups.length + 1 });
+
+      if (errors.length) showError(`Preserve-data action partial: ${errors.join("; ")}`);
+      $("remove-panel").classList.add("hidden");
+      pendingRemove = null;
+      await refreshDetail();
+    } finally {
+      $("remove-this-group-btn").disabled = false;
+      $("remove-preserve-btn").disabled = false;
+      $("remove-offboard-btn").disabled = false;
+    }
+  });
+
   $("remove-offboard-btn").addEventListener("click", async () => {
     if (!pendingRemove || !currentDetailGroup) return;
     const { userId, userName, otherManagedGroups } = pendingRemove;
@@ -911,6 +978,52 @@
   // =====================================================================
   // CREATE NEW USER — shared modal, invoked from both Add Member modal and Members view
   // =====================================================================
+
+  // Email body sent to portaladmins@ when an admin picks "Disable account only (preserve data)".
+  // Gives the admin group context + explicit next-step options.
+  function buildPreserveDataAdminEmailHtml({ adminName, adminMail, userName, userId, groupContextName, removedGroupsHtml }) {
+    const adminNameSafe = escapeHtml(adminName);
+    const adminMailSafe = escapeHtml(adminMail);
+    const userNameSafe = escapeHtml(userName);
+    const userIdSafe = escapeHtml(userId);
+    const groupContextNameSafe = escapeHtml(groupContextName);
+    return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f5f8fc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#222;">
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#f5f8fc;padding:24px 0;">
+  <tr><td align="center">
+    <table role="presentation" cellpadding="0" cellspacing="0" width="600" style="background:#ffffff;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.05);overflow:hidden;">
+      <tr><td style="background:#856404;color:#fff;padding:18px 28px;">
+        <h1 style="margin:0;font-size:18px;font-weight:700;">EVAA Admin Notification</h1>
+        <p style="margin:4px 0 0;font-size:13px;opacity:0.9;">User disabled — data preserved (license retained)</p>
+      </td></tr>
+      <tr><td style="padding:22px 28px;">
+        <p style="margin:0 0 12px;font-size:14px;line-height:1.5;">Hi portal admins,</p>
+        <p style="margin:0 0 16px;font-size:14px;line-height:1.5;"><strong>${adminNameSafe}</strong> (${adminMailSafe}) just disabled <strong>${userNameSafe}</strong>'s account from the <em>${groupContextNameSafe}</em> context. The user has been:</p>
+        <ul style="margin:0 0 12px;padding-left:22px;font-size:14px;line-height:1.6;">
+          <li>Removed from these managed groups:
+            <ul style="margin-top:4px;">${removedGroupsHtml}</ul>
+          </li>
+          <li>Account disabled in Entra (can't sign in)</li>
+          <li><strong>License retained</strong> — mailbox and OneDrive are preserved indefinitely</li>
+        </ul>
+
+        <h3 style="color:#1B4F8C;font-size:14px;margin:18px 0 6px;">Why this matters</h3>
+        <p style="margin:0 0 12px;font-size:14px;line-height:1.5;">Keeping the license assigned (~$3/mo) means we can recover the user's data later. With <em>Offboard fully</em>, Exchange would have started a 30-day countdown to permanently delete the mailbox + OneDrive.</p>
+
+        <h3 style="color:#1B4F8C;font-size:14px;margin:18px 0 6px;">Options for the group to decide</h3>
+        <ol style="margin:0 0 12px;padding-left:22px;font-size:14px;line-height:1.6;">
+          <li><strong>Leave as-is</strong> — data preserved indefinitely, license continues. Good for departures where their data may be needed (e.g. financial records, ongoing correspondence).</li>
+          <li><strong>Re-enable later</strong> — open the admin portal, find this user, re-enable the account, re-add to groups as needed. Their mailbox / OneDrive come back exactly as left.</li>
+          <li><strong>Offboard fully later</strong> — open the admin portal, find this user, click × on any remaining group (or just on the user) and pick <em>Offboard fully</em>. License removed, 30-day deletion clock starts.</li>
+        </ol>
+
+        <p style="margin:16px 0 0;font-size:14px;line-height:1.5;">Admin portal: <a href="https://markmeevaa.github.io/directory/admin/" style="color:#1B4F8C;">markmeevaa.github.io/directory/admin/</a></p>
+        <p style="margin:6px 0 0;font-size:11px;color:#888;">Acted by: ${adminNameSafe} &lt;${adminMailSafe}&gt; · User ID: ${userIdSafe}</p>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>`;
+  }
 
   // Welcome email body sent to a newly-created user's PersonalEmail.
   // Plain HTML, EVAA blue accents, mobile-friendly inline styles.

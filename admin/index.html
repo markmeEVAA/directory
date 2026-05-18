@@ -246,14 +246,19 @@
         </div>
         <p id="remove-panel-body"></p>
         <ul id="remove-other-groups" class="muted other-groups-list"></ul>
-        <div class="modal-actions">
+        <div class="modal-actions modal-actions-stack">
           <button id="remove-this-group-btn" class="btn-secondary">Remove from this group only</button>
+          <button id="remove-preserve-btn" class="btn-warning">Disable account only (preserve data)</button>
           <button id="remove-offboard-btn" class="btn-danger">Offboard fully</button>
         </div>
+        <p class="muted footnote">
+          <strong>"Preserve data" notifies portal admins by email</strong> so the group can decide together whether to fully offboard later or restore the user.
+        </p>
         <details class="remove-details">
-          <summary>What happens to their email and files?</summary>
+          <summary>What happens to their email and files? (read before deciding)</summary>
           <div class="remove-details-content">
-            <p><strong>Per-group remove</strong> — only unlinks this one group. Nothing else changes. Account, license, mailbox, OneDrive all untouched.</p>
+            <p><strong>Remove from this group only</strong> — only unlinks this one group. Nothing else changes. Account, license, mailbox, OneDrive all untouched.</p>
+            <p><strong>Disable account only (preserve data)</strong> — removes from <strong>all managed groups</strong> + disables the account + <strong>keeps the EVAA license assigned</strong>. The user can't sign in, but their mailbox and OneDrive are preserved <em>indefinitely</em> as long as the license stays assigned (~$3/mo cost continues). Notifies portal admins by email so the group can review later. Good for treasurers / departures where data may be needed.</p>
             <p><strong>Offboard fully</strong> does three things instantly:</p>
             <ol>
               <li>Removes from <strong>all</strong> managed groups</li>
@@ -267,7 +272,7 @@
               <li><strong>Within 30 days:</strong> re-enable account + re-assign EVAA license → mailbox and OneDrive are fully restored. Group memberships need to be re-added manually.</li>
               <li><strong>After 30 days:</strong> Exchange auto-deletes the mailbox and OneDrive. The disabled user object remains but their data is gone. (Unless Litigation Hold or Retention Policies were configured — they are not, currently.)</li>
             </ul>
-            <p class="muted">If you might need someone's data preserved indefinitely (e.g. a treasurer leaving with financial records in their inbox), <strong>don't offboard fully</strong> — just remove from their groups and leave the account disabled-with-license. The license cost preserves the data.</p>
+            <p class="muted">If you're not sure, pick <strong>Disable account only</strong> — the data stays safe and the portal admin group will get an email to discuss next steps.</p>
           </div>
         </details>
       </div>
