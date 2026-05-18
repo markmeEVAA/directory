@@ -248,9 +248,28 @@
         <ul id="remove-other-groups" class="muted other-groups-list"></ul>
         <div class="modal-actions">
           <button id="remove-this-group-btn" class="btn-secondary">Remove from this group only</button>
-          <button id="remove-offboard-btn" class="btn-danger">Offboard fully (license + disable account)</button>
+          <button id="remove-offboard-btn" class="btn-danger">Offboard fully</button>
         </div>
-        <p class="muted footnote">Per-group remove unlinks just this group association. Full offboard removes from all managed groups, removes the EVAA license, and disables the account.</p>
+        <details class="remove-details">
+          <summary>What happens to their email and files?</summary>
+          <div class="remove-details-content">
+            <p><strong>Per-group remove</strong> — only unlinks this one group. Nothing else changes. Account, license, mailbox, OneDrive all untouched.</p>
+            <p><strong>Offboard fully</strong> does three things instantly:</p>
+            <ol>
+              <li>Removes from <strong>all</strong> managed groups</li>
+              <li>Removes the EVAA license</li>
+              <li>Disables the account (can't sign in)</li>
+            </ol>
+            <p class="warn-block">
+              <strong>⚠ 30-day data window.</strong> Once the license is removed, Exchange starts a <strong>30-day countdown</strong> on the user's mailbox and OneDrive. The account object itself stays in Entra as disabled forever, BUT:
+            </p>
+            <ul>
+              <li><strong>Within 30 days:</strong> re-enable account + re-assign EVAA license → mailbox and OneDrive are fully restored. Group memberships need to be re-added manually.</li>
+              <li><strong>After 30 days:</strong> Exchange auto-deletes the mailbox and OneDrive. The disabled user object remains but their data is gone. (Unless Litigation Hold or Retention Policies were configured — they are not, currently.)</li>
+            </ul>
+            <p class="muted">If you might need someone's data preserved indefinitely (e.g. a treasurer leaving with financial records in their inbox), <strong>don't offboard fully</strong> — just remove from their groups and leave the account disabled-with-license. The license cost preserves the data.</p>
+          </div>
+        </details>
       </div>
     </div>
 

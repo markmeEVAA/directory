@@ -459,6 +459,53 @@ td a:hover { text-decoration: underline; }
   color: #888;
 }
 
+/* Disclosure / details panel inside Offboard modal */
+.remove-details {
+  margin-top: 12px;
+  border-top: 1px solid #e6ecf3;
+  padding-top: 10px;
+}
+.remove-details > summary {
+  cursor: pointer;
+  font-size: 0.85em;
+  color: #1B4F8C;
+  font-weight: 600;
+  list-style: none;
+  padding: 4px 0;
+  user-select: none;
+}
+.remove-details > summary::before {
+  content: "▸ ";
+  display: inline-block;
+  transition: transform 0.15s;
+}
+.remove-details[open] > summary::before {
+  content: "▾ ";
+}
+.remove-details > summary:hover { color: #154070; }
+.remove-details-content {
+  font-size: 0.85em;
+  line-height: 1.5;
+  color: #444;
+  padding: 8px 0;
+}
+.remove-details-content p,
+.remove-details-content ul,
+.remove-details-content ol {
+  margin: 8px 0;
+}
+.remove-details-content ul,
+.remove-details-content ol {
+  padding-left: 22px;
+}
+.warn-block {
+  background: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 4px;
+  padding: 8px 12px;
+  color: #856404;
+}
+
 /* Top tab nav */
 .tab-nav {
   background: #fff;
