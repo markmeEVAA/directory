@@ -246,9 +246,9 @@
       return `<tr><td colspan="4" class="muted">${escapeHtml(emptyMsg)}</td></tr>`;
     }
     return people.map((p) => `<tr>
-      <td>${escapeHtml(p.displayName)}</td>
+      <td><button class="link-button" data-jump-user-id="${escapeHtml(p.id)}" data-user-name="${escapeHtml(p.displayName)}">${escapeHtml(p.displayName)}</button></td>
       <td>${escapeHtml(p.jobTitle || "")}</td>
-      <td>${p.mail ? `<a href="mailto:${escapeHtml(p.mail)}">${escapeHtml(p.mail)}</a>` : `<span class="muted">—</span>`}</td>
+      <td>${p.mail ? `<a href="mailto:${escapeHtml(p.mail)}" onclick="event.stopPropagation()">${escapeHtml(p.mail)}</a>` : `<span class="muted">—</span>`}</td>
       <td class="row-actions"><button class="btn-remove" data-user-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.displayName)}" data-role="${role}" aria-label="Remove">×</button></td>
     </tr>`).join("");
   }
@@ -266,6 +266,12 @@
   function wireRemoveHandlers() {
     ["owners-tbody", "members-tbody"].forEach((id) => {
       $(id).addEventListener("click", async (e) => {
+        // Cross-nav: clicking the person's name jumps to their user detail page
+        const jumpBtn = e.target.closest(".link-button[data-jump-user-id]");
+        if (jumpBtn) {
+          jumpToUser(jumpBtn.dataset.jumpUserId, { id: jumpBtn.dataset.jumpUserId, displayName: jumpBtn.dataset.userName });
+          return;
+        }
         const btn = e.target.closest(".btn-remove");
         if (!btn) return;
         const userId = btn.dataset.userId;
@@ -619,9 +625,9 @@
         roleCell = `<span class="role-badge role-member">Member</span>`;
       }
       return `<tr>
-        <td>${escapeHtml(g.displayName)}</td>
+        <td><button class="link-button" data-jump-group-id="${escapeHtml(g.id)}">${escapeHtml(g.displayName)}</button></td>
         <td>${roleCell}</td>
-        <td>${g.mail ? `<a href="mailto:${escapeHtml(g.mail)}">${escapeHtml(g.mail)}</a>` : `<span class="muted">—</span>`}</td>
+        <td>${g.mail ? `<a href="mailto:${escapeHtml(g.mail)}" onclick="event.stopPropagation()">${escapeHtml(g.mail)}</a>` : `<span class="muted">—</span>`}</td>
         <td class="row-actions"><button class="btn-remove" data-group-id="${escapeHtml(g.id)}" data-group-name="${escapeHtml(g.displayName)}" data-is-member="${isMember}" data-is-owner="${isOwner}" aria-label="Remove from group">×</button></td>
       </tr>`;
     }).join("");
@@ -629,6 +635,22 @@
     tbody.querySelectorAll(".btn-remove").forEach((btn) => {
       btn.addEventListener("click", () => removeUserFromGroup(btn.dataset.groupId, btn.dataset.groupName, btn));
     });
+    // Cross-nav: click group name on the user detail page jumps to that group's detail
+    tbody.querySelectorAll(".link-button[data-jump-group-id]").forEach((b) => {
+      b.addEventListener("click", () => jumpToGroup(b.dataset.jumpGroupId));
+    });
+  }
+
+  function jumpToGroup(groupId) {
+    activeTab = "groups";
+    document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === "groups"));
+    openGroupDetail(groupId);
+  }
+
+  function jumpToUser(userId, userCache) {
+    activeTab = "members";
+    document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === "members"));
+    openUserDetail(userId, userCache);
   }
 
   async function removeUserFromGroup(groupId, groupName, btn) {
