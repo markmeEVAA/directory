@@ -482,9 +482,13 @@
         }
       }
 
-      // 3. Remove EVAA license
+      // 3. Remove EVAA license (idempotent — if already gone, treat as success)
       try { await GRAPH.removeUserLicense(userId); }
-      catch (err) { errors.push(`license: ${err.message}`); }
+      catch (err) {
+        if (!/does not have a corresponding license/i.test(err.message)) {
+          errors.push(`license: ${err.message}`);
+        }
+      }
 
       // 4. Disable account
       try { await GRAPH.disableUserAccount(userId); }
