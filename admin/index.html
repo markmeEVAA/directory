@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EVAA Admin Portal</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <h1>EVAA Admin Portal</h1>
+      <div id="user-area" class="hidden">
+        <span id="user-name"></span>
+        <button id="sign-out-btn" class="btn-link">Sign out</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section id="signin-view" class="view hidden">
+      <div class="card">
+        <h2>Admin sign-in</h2>
+        <p>This portal is restricted to members of the <strong>EVAA Portal Admins</strong> group. Sign in with your <code>@evaasports.org</code> account to continue.</p>
+        <button id="sign-in-btn" class="btn-primary" disabled>Sign in with Microsoft</button>
+      </div>
+    </section>
+
+    <section id="no-access-view" class="view hidden">
+      <div class="card error-card">
+        <h2>Not authorized</h2>
+        <p>Your account is not a member of the <strong>EVAA Portal Admins</strong> group. Contact <a href="mailto:web-admin@evaasports.org">web-admin@evaasports.org</a> to request access.</p>
+        <button id="signout-from-noaccess-btn" class="btn-link">Sign out</button>
+      </div>
+    </section>
+
+    <section id="loading-view" class="view">
+      <div class="card">
+        <p class="loading" id="loading-text">Initializing…</p>
+      </div>
+    </section>
+
+    <section id="groups-view" class="view hidden">
+      <div class="toolbar">
+        <input type="search" id="group-filter" placeholder="Filter groups by name…" />
+        <span id="groups-count" class="muted"></span>
+      </div>
+      <div id="groups-list-container">
+        <table id="groups-table">
+          <thead>
+            <tr>
+              <th data-col="0">Group<span class="arrow"></span></th>
+              <th data-col="1">Owners<span class="arrow"></span></th>
+              <th data-col="2">Email<span class="arrow"></span></th>
+            </tr>
+          </thead>
+          <tbody id="groups-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="group-detail-view" class="view hidden">
+      <button id="back-to-groups-btn" class="btn-link back-link">← Back to groups</button>
+      <h2 id="group-detail-name"></h2>
+      <p id="group-detail-mail" class="muted"></p>
+
+      <h3>Directors / Owners <span id="owners-count" class="count-badge"></span></h3>
+      <div id="owners-list-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Role</th>
+              <th>Email</th>
+            </tr>
+          </thead>
+          <tbody id="owners-tbody"></tbody>
+        </table>
+      </div>
+
+      <h3>Members <span id="members-count" class="count-badge"></span></h3>
+      <div id="members-list-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Role</th>
+              <th>Email</th>
+            </tr>
+          </thead>
+          <tbody id="members-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <div id="error-banner" class="error-banner hidden">
+      <span id="error-text"></span>
+      <button id="error-close" aria-label="Dismiss">×</button>
+    </div>
+  </main>
+
+  <footer>
+    <p>EVAA Admin Portal &middot; <span id="env-info"></span></p>
+  </footer>
+
+  <!-- MSAL.js v3 (browser SPA) — exposes global `msal` -->
+  <script src="https://unpkg.com/@azure/msal-browser@3.7.1/lib/msal-browser.min.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/graph.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
