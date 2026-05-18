@@ -895,17 +895,33 @@
 
     const stateBadge = $("user-account-state");
     const isDisabled = user.accountEnabled === false;
-    if (isDisabled) {
-      stateBadge.textContent = "Disabled";
-      stateBadge.className = "account-state-badge state-disabled";
+    const hasLicense = (user.assignedLicenses || []).length > 0;
+    const isFullyOffboarded = isDisabled && !hasLicense;
+    const isPreservedData = isDisabled && hasLicense;
+
+    if (isFullyOffboarded) {
+      stateBadge.textContent = "Fully offboarded";
+      stateBadge.className = "account-state-badge state-offboarded";
+    } else if (isPreservedData) {
+      stateBadge.textContent = "Disabled · Data preserved";
+      stateBadge.className = "account-state-badge state-preserved";
     } else {
       stateBadge.textContent = "Active";
       stateBadge.className = "account-state-badge state-active";
     }
-    // Offboard always shown (admins can fully offboard a disabled user too, e.g. to remove
-    // license after a preserve-data period). Re-enable only when currently disabled.
-    $("offboard-user-btn").classList.remove("hidden");
+
+    // Button visibility by state:
+    //  Active  → Offboard shown, Re-enable hidden
+    //  Preserved (disabled with license) → Offboard + Re-enable both shown
+    //  Fully offboarded → Re-enable only (Offboard is already done)
+    $("offboard-user-btn").classList.toggle("hidden", isFullyOffboarded);
     $("reenable-user-btn").classList.toggle("hidden", !isDisabled);
+
+    // Add-to-group only meaningful if account is active (otherwise the user can't use the group)
+    $("add-user-to-group-btn").classList.toggle("hidden", isDisabled);
+
+    // Show a state-specific info banner so admins immediately understand what's happening
+    renderUserStateBanner({ isFullyOffboarded, isPreservedData });
 
     // Render assigned licenses (best-effort: needs the SKU catalog)
     renderUserLicenses(user.assignedLicenses || []);
@@ -959,6 +975,37 @@
     tbody.querySelectorAll(".link-button[data-jump-group-id]").forEach((b) => {
       b.addEventListener("click", () => jumpToGroup(b.dataset.jumpGroupId));
     });
+  }
+
+  // State-specific banner under the user header. Explains what's true + what's possible
+  // so admins immediately understand a non-active user's status.
+  function renderUserStateBanner({ isFullyOffboarded, isPreservedData }) {
+    const banner = $("user-state-banner");
+    if (isFullyOffboarded) {
+      banner.className = "user-state-banner banner-offboarded";
+      banner.innerHTML = `
+        <strong>This user has been fully offboarded.</strong>
+        Account is disabled, EVAA license removed, removed from all managed groups.
+        Exchange will permanently delete the mailbox and OneDrive within <strong>30 days</strong> of license removal (unless retention policies were configured — they aren't on this tenant).
+        <br><br>
+        <em>To recover within the 30-day window:</em> click <strong>Re-enable &amp; re-license</strong> below.
+        After 30 days, the user object remains but their email + files are unrecoverable from this UI.
+      `;
+      banner.classList.remove("hidden");
+    } else if (isPreservedData) {
+      banner.className = "user-state-banner banner-preserved";
+      banner.innerHTML = `
+        <strong>This user is disabled but data is preserved.</strong>
+        Account can't sign in. License is still assigned, so mailbox + OneDrive are intact (~$3/mo cost continues).
+        Portal admins were notified by email at the time this happened.
+        <br><br>
+        <em>Options:</em> <strong>Re-enable &amp; re-license</strong> to restore access, or <strong>Offboard</strong> to remove the license (starts the 30-day data clock).
+      `;
+      banner.classList.remove("hidden");
+    } else {
+      banner.classList.add("hidden");
+      banner.innerHTML = "";
+    }
   }
 
   function renderUserLicenses(assignedLicenses) {
