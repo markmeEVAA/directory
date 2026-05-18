@@ -387,6 +387,43 @@ td a:hover { text-decoration: underline; }
 .user-name { font-weight: 600; color: #1B4F8C; }
 .user-mail { font-size: 0.85em; }
 
+/* Remove modal extras */
+.btn-danger {
+  background: #c44;
+  color: #fff;
+  border: 1px solid #a33;
+  padding: 6px 14px;
+  border-radius: 4px;
+  font-size: 0.9em;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-danger:hover { background: #a33; }
+.btn-danger:disabled { opacity: 0.5; cursor: wait; }
+
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+  margin-bottom: 8px;
+}
+
+.other-groups-list {
+  list-style: disc;
+  padding-left: 24px;
+  margin: 8px 0;
+  font-size: 0.9em;
+}
+
+.footnote {
+  font-size: 0.8em;
+  margin-top: 12px;
+  margin-bottom: 0;
+  color: #888;
+}
+
 /* Mobile */
 @media (max-width: 700px) {
   main { padding: 12px; }

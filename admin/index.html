@@ -113,6 +113,23 @@
       </div>
     </div>
 
+    <!-- Remove confirm modal (smart prompt: per-group vs full offboard) -->
+    <div id="remove-panel" class="modal-overlay hidden">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3 id="remove-panel-title">Remove user</h3>
+          <button id="remove-panel-close" class="modal-close" aria-label="Close">×</button>
+        </div>
+        <p id="remove-panel-body"></p>
+        <ul id="remove-other-groups" class="muted other-groups-list"></ul>
+        <div class="modal-actions">
+          <button id="remove-this-group-btn" class="btn-secondary">Remove from this group only</button>
+          <button id="remove-offboard-btn" class="btn-danger">Offboard fully (license + disable account)</button>
+        </div>
+        <p class="muted footnote">Per-group remove unlinks just this group association. Full offboard removes from all managed groups, removes the EVAA license, and disables the account.</p>
+      </div>
+    </div>
+
     <div id="error-banner" class="error-banner hidden">
       <span id="error-text"></span>
       <button id="error-close" aria-label="Dismiss">×</button>

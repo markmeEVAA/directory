@@ -245,7 +245,9 @@
 
   // ---- Phase 2.1: Add/Remove directors + members ----
 
-  // Delegated remove handler (event delegation on tbodies)
+  // Smart remove: open the confirm modal with per-group vs full-offboard options.
+  let pendingRemove = null; // { userId, userName, role, btn, otherManagedGroups }
+
   function wireRemoveHandlers() {
     ["owners-tbody", "members-tbody"].forEach((id) => {
       $(id).addEventListener("click", async (e) => {
@@ -256,28 +258,146 @@
         const role = btn.dataset.role; // "owner" or "member"
         if (!currentDetailGroup || !userId) return;
 
-        const label = role === "owner" ? "director (owner)" : "member";
-        if (!confirm(`Remove ${userName} as ${label} of "${currentDetailGroup.displayName}"?\n\nThis removes only this group association — the user's account and other group memberships are untouched.`)) return;
-
         btn.disabled = true;
         btn.textContent = "…";
+
+        // Query what other managed groups this user is in (excluding this one).
+        let otherManagedGroups = [];
         try {
-          if (role === "owner") {
-            await GRAPH.removeOwner(currentDetailGroup.id, userId);
-          } else {
-            await GRAPH.removeMember(currentDetailGroup.id, userId);
-          }
-          logAction(`removed ${role}`, userName, userId);
-          await refreshDetail();
+          const allGroups = await GRAPH.getUserMemberOf(userId);
+          const managedIds = new Set(state.groups.map((g) => g.id));
+          otherManagedGroups = allGroups.filter(
+            (g) => managedIds.has(g.id) && g.id !== currentDetailGroup.id
+          );
         } catch (err) {
-          btn.disabled = false;
-          btn.textContent = "×";
-          showError(`Failed to remove ${userName}: ${err.message}`);
+          // Non-fatal — just means we can't show the "also in" list. Continue with empty list.
+          console.warn("Could not fetch user's other groups:", err);
         }
+
+        pendingRemove = { userId, userName, role, btn, otherManagedGroups };
+        openRemovePanel();
       });
     });
   }
   wireRemoveHandlers();
+
+  function openRemovePanel() {
+    const { userName, role, otherManagedGroups } = pendingRemove;
+    const label = role === "owner" ? "director (owner)" : "member";
+    $("remove-panel-title").textContent = `Remove ${userName}`;
+    const groupLine = `${userName} is currently a ${label} of <strong>${escapeHtml(currentDetailGroup.displayName)}</strong>.`;
+    let bodyHtml = groupLine;
+    if (otherManagedGroups.length > 0) {
+      bodyHtml += ` They are also in <strong>${otherManagedGroups.length}</strong> other managed group${otherManagedGroups.length === 1 ? "" : "s"}:`;
+      $("remove-other-groups").innerHTML = otherManagedGroups
+        .map((g) => `<li>${escapeHtml(g.displayName)}</li>`)
+        .join("");
+      $("remove-other-groups").classList.remove("hidden");
+    } else {
+      bodyHtml += ` They are not in any other managed groups.`;
+      $("remove-other-groups").innerHTML = "";
+      $("remove-other-groups").classList.add("hidden");
+    }
+    $("remove-panel-body").innerHTML = bodyHtml;
+    $("remove-panel").classList.remove("hidden");
+  }
+
+  function closeRemovePanel() {
+    if (pendingRemove && pendingRemove.btn) {
+      pendingRemove.btn.disabled = false;
+      pendingRemove.btn.textContent = "×";
+    }
+    pendingRemove = null;
+    $("remove-panel").classList.add("hidden");
+  }
+
+  $("remove-panel-close").addEventListener("click", closeRemovePanel);
+
+  $("remove-this-group-btn").addEventListener("click", async () => {
+    if (!pendingRemove || !currentDetailGroup) return;
+    const { userId, userName, role } = pendingRemove;
+    $("remove-this-group-btn").disabled = true;
+    $("remove-offboard-btn").disabled = true;
+    try {
+      if (role === "owner") {
+        await GRAPH.removeOwner(currentDetailGroup.id, userId);
+      } else {
+        await GRAPH.removeMember(currentDetailGroup.id, userId);
+      }
+      logAction(`removed ${role} (per-group only)`, userName, userId);
+      $("remove-panel").classList.add("hidden");
+      pendingRemove = null;
+      await refreshDetail();
+    } catch (err) {
+      showError(`Failed to remove ${userName}: ${err.message}`);
+    } finally {
+      $("remove-this-group-btn").disabled = false;
+      $("remove-offboard-btn").disabled = false;
+    }
+  });
+
+  $("remove-offboard-btn").addEventListener("click", async () => {
+    if (!pendingRemove || !currentDetailGroup) return;
+    const { userId, userName, otherManagedGroups } = pendingRemove;
+    const confirmMsg = `Offboard ${userName} fully?\n\nThis will:\n  • Remove from this group + ${otherManagedGroups.length} other managed group(s)\n  • Remove the EVAA license\n  • Disable the account\n\nThis cannot be undone via this UI (re-enable via Entra admin center if needed).`;
+    if (!confirm(confirmMsg)) return;
+
+    $("remove-this-group-btn").disabled = true;
+    $("remove-offboard-btn").disabled = true;
+    const errors = [];
+
+    try {
+      // 1. Remove from THIS group (covers the current view's role)
+      try {
+        if (pendingRemove.role === "owner") {
+          await GRAPH.removeOwner(currentDetailGroup.id, userId);
+        } else {
+          await GRAPH.removeMember(currentDetailGroup.id, userId);
+        }
+      } catch (err) {
+        errors.push(`current group: ${err.message}`);
+      }
+
+      // 2. Remove from all OTHER managed groups (members; owners are role-specific but we
+      //    aggressively unlink as member to be thorough).
+      for (const g of otherManagedGroups) {
+        try {
+          await GRAPH.removeMember(g.id, userId);
+        } catch (err) {
+          // Try owner ref too (in case they were owner of that group, not member)
+          try { await GRAPH.removeOwner(g.id, userId); } catch (_) {
+            errors.push(`${g.displayName}: ${err.message}`);
+          }
+        }
+      }
+
+      // 3. Remove EVAA license
+      try {
+        await GRAPH.removeUserLicense(userId);
+      } catch (err) {
+        errors.push(`license: ${err.message}`);
+      }
+
+      // 4. Disable account
+      try {
+        await GRAPH.disableUserAccount(userId);
+      } catch (err) {
+        errors.push(`disable account: ${err.message}`);
+      }
+
+      logAction("offboarded fully", userName, userId);
+
+      if (errors.length > 0) {
+        showError(`Offboard partial: ${errors.length} step(s) failed. ${errors.join("; ")}`);
+      }
+      $("remove-panel").classList.add("hidden");
+      pendingRemove = null;
+      await refreshDetail();
+    } finally {
+      $("remove-this-group-btn").disabled = false;
+      $("remove-offboard-btn").disabled = false;
+    }
+  });
 
   // Add Director / Add Member — opens inline search panel
   let addTarget = null; // "owner" or "member"

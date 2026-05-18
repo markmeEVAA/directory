@@ -113,6 +113,41 @@ const GRAPH = (() => {
     return callGraph(`/groups/${groupId}/members/${userId}/$ref`, { method: "DELETE" });
   }
 
+  // Get all groups a user is a direct member of.
+  // Used to decide single-group remove vs full offboard for the smart prompt.
+  async function getUserMemberOf(userId) {
+    const path = `/users/${userId}/memberOf/microsoft.graph.group?$select=id,displayName,mail,groupTypes&$top=200`;
+    return callGraphAll(path);
+  }
+
+  // EVAA Standard license SKU (from project state file line 197 / 207).
+  const EVAA_LICENSE_SKU_ID = "3b555118-da6a-4418-894f-7df1e2096870";
+
+  // Remove the EVAA license from a user. POST /users/{id}/assignLicense with removeLicenses array.
+  async function removeUserLicense(userId, skuId = EVAA_LICENSE_SKU_ID) {
+    return callGraph(`/users/${userId}/assignLicense`, {
+      method: "POST",
+      body: JSON.stringify({
+        addLicenses: [],
+        removeLicenses: [skuId],
+      }),
+    });
+  }
+
+  async function disableUserAccount(userId) {
+    return callGraph(`/users/${userId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ accountEnabled: false }),
+    });
+  }
+
+  async function enableUserAccount(userId) {
+    return callGraph(`/users/${userId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ accountEnabled: true }),
+    });
+  }
+
   return {
     getMe,
     isPortalAdmin,
@@ -122,5 +157,10 @@ const GRAPH = (() => {
     searchUsers,
     addOwner, removeOwner,
     addMember, removeMember,
+    getUserMemberOf,
+    removeUserLicense,
+    disableUserAccount,
+    enableUserAccount,
+    EVAA_LICENSE_SKU_ID,
   };
 })();
