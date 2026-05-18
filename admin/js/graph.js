@@ -217,6 +217,27 @@ const GRAPH = (() => {
     });
   }
 
+  // Send mail as the signed-in admin (delegated Mail.Send).
+  // toRecipients: array of email address strings.
+  // htmlBody: HTML string (use \n for newlines inside <pre> if needed).
+  async function sendMail(toRecipients, subject, htmlBody, opts = {}) {
+    const body = {
+      message: {
+        subject,
+        body: { contentType: "HTML", content: htmlBody },
+        toRecipients: toRecipients.map((addr) => ({ emailAddress: { address: addr } })),
+      },
+      saveToSentItems: opts.saveToSentItems !== false,
+    };
+    if (opts.cc && opts.cc.length) {
+      body.message.ccRecipients = opts.cc.map((addr) => ({ emailAddress: { address: addr } }));
+    }
+    return callGraph(`/me/sendMail`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
   return {
     getMe,
     isPortalAdmin,
@@ -235,6 +256,7 @@ const GRAPH = (() => {
     createUser,
     assignUserLicense,
     updateUser,
+    sendMail,
     EVAA_LICENSE_SKU_ID,
   };
 })();

@@ -614,6 +614,15 @@ td a:hover { text-decoration: underline; }
   font-family: ui-monospace, Menlo, Consolas, monospace;
 }
 
+.success-note {
+  background: #d4edda;
+  border: 1px solid #c3e6cb;
+  color: #155724;
+  padding: 10px 14px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
 /* Inline edit on user detail page */
 .btn-edit-inline {
   background: transparent;

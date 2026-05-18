@@ -725,39 +725,6 @@
     tbody.querySelectorAll(".link-button[data-jump-group-id]").forEach((b) => {
       b.addEventListener("click", () => jumpToGroup(b.dataset.jumpGroupId));
     });
-
-    renderViewAsPanel(user, userGroups || [], ownerIds);
-  }
-
-  // "Canvas portal preview" — shows what this user would see if they signed into the
-  // existing canvas portal (admin vs sport-director view).
-  function renderViewAsPanel(user, memberGroups, ownerIdSet) {
-    const PORTAL_ADMINS_GROUP_ID = "98d51c39-149a-4dbf-9e86-1510035d8239";
-    const isAdmin = memberGroups.some((g) => g.id === PORTAL_ADMINS_GROUP_ID);
-    const summary = $("view-as-summary");
-    const list = $("view-as-groups");
-
-    if (isAdmin) {
-      summary.innerHTML = `<strong>${escapeHtml(user.displayName)}</strong> is a member of <em>EVAA Portal Admins</em>. In the canvas portal, they would see <strong>all ${state.groups.length} managed groups</strong> in the SportPicker (admin path).`;
-      list.innerHTML = "";
-      return;
-    }
-
-    // Non-admin path: canvas portal shows groups they OWN (filtered to EVAA/Fusion).
-    const managedIds = new Set(state.groups.map((g) => g.id));
-    const ownedManaged = state.groups.filter((g) => managedIds.has(g.id) && ownerIdSet.has(g.id));
-
-    if (ownedManaged.length === 0) {
-      summary.innerHTML = `<strong>${escapeHtml(user.displayName)}</strong> is not a portal admin and does not own any managed groups. They would see the canvas portal's <em>no access</em> message ("You don't have access to this portal. Contact web-admin@evaasports.org for help.")`;
-      list.innerHTML = "";
-      return;
-    }
-
-    summary.innerHTML = `<strong>${escapeHtml(user.displayName)}</strong> is not a portal admin. In the canvas portal they would see <strong>${ownedManaged.length} group${ownedManaged.length === 1 ? "" : "s"}</strong> in their SportPicker (groups they own):`;
-    list.innerHTML = ownedManaged
-      .sort((a, b) => (a.displayName || "").localeCompare(b.displayName || ""))
-      .map((g) => `<li>${escapeHtml(g.displayName)}</li>`)
-      .join("");
   }
 
   function jumpToGroup(groupId) {
@@ -945,6 +912,60 @@
   // CREATE NEW USER — shared modal, invoked from both Add Member modal and Members view
   // =====================================================================
 
+  // Welcome email body sent to a newly-created user's PersonalEmail.
+  // Plain HTML, EVAA blue accents, mobile-friendly inline styles.
+  function buildWelcomeEmailHtml({ first, last, upn, password, groupName, jobTitle, adminMail }) {
+    const groupNameSafe = escapeHtml(groupName);
+    const upnSafe = escapeHtml(upn);
+    const pwdSafe = escapeHtml(password);
+    const firstSafe = escapeHtml(first);
+    const jobTitleSafe = escapeHtml(jobTitle);
+    const adminMailSafe = escapeHtml(adminMail);
+    return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f5f8fc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#222;">
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#f5f8fc;padding:24px 0;">
+  <tr><td align="center">
+    <table role="presentation" cellpadding="0" cellspacing="0" width="600" style="background:#ffffff;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.05);overflow:hidden;">
+      <tr><td style="background:#1B4F8C;color:#fff;padding:20px 28px;">
+        <h1 style="margin:0;font-size:20px;font-weight:700;">Welcome to EVAA</h1>
+        <p style="margin:4px 0 0;font-size:14px;color:#cfd8e6;">Eastview Athletic Association</p>
+      </td></tr>
+      <tr><td style="padding:24px 28px;">
+        <p style="margin:0 0 12px;font-size:15px;line-height:1.5;">Hi ${firstSafe},</p>
+        <p style="margin:0 0 16px;font-size:15px;line-height:1.5;">You've been added to <strong>${groupNameSafe}</strong> as <strong>${jobTitleSafe}</strong>. A new EVAA Microsoft 365 account has been created for you. Here are your sign-in credentials:</p>
+
+        <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;background:#f5f8fc;border:1px solid #d9e1ec;border-radius:6px;margin:12px 0;">
+          <tr><td style="padding:14px 16px;">
+            <div style="font-size:14px;margin-bottom:6px;"><strong>Sign-in address:</strong></div>
+            <div style="font-family:Menlo,Consolas,monospace;font-size:15px;color:#1B4F8C;margin-bottom:14px;">${upnSafe}</div>
+            <div style="font-size:14px;margin-bottom:6px;"><strong>Temporary password:</strong></div>
+            <div style="font-family:Menlo,Consolas,monospace;font-size:15px;color:#1B4F8C;">${pwdSafe}</div>
+          </td></tr>
+        </table>
+
+        <p style="margin:0 0 12px;font-size:14px;line-height:1.5;"><strong>Important:</strong> you'll be prompted to change this password the first time you sign in. Pick something memorable but secure.</p>
+
+        <h3 style="color:#1B4F8C;font-size:15px;margin:20px 0 8px;">How to sign in</h3>
+        <ol style="margin:0 0 12px;padding-left:22px;font-size:14px;line-height:1.6;">
+          <li>Go to <a href="https://www.office.com" style="color:#1B4F8C;">office.com</a> and click <strong>Sign in</strong>.</li>
+          <li>Enter the sign-in address above.</li>
+          <li>Enter the temporary password.</li>
+          <li>Follow the prompts to set a new password.</li>
+          <li>From there you'll have access to Outlook (your new EVAA email), Word, Excel, Teams, etc.</li>
+        </ol>
+
+        <h3 style="color:#1B4F8C;font-size:15px;margin:20px 0 8px;">Help</h3>
+        <p style="margin:0 0 12px;font-size:14px;line-height:1.5;">If you have trouble signing in or need anything changed, reply to this email or contact <a href="mailto:${adminMailSafe}" style="color:#1B4F8C;">${adminMailSafe}</a>.</p>
+        <p style="margin:0;font-size:14px;line-height:1.5;">Thanks for being part of EVAA!</p>
+      </td></tr>
+      <tr><td style="background:#f5f8fc;color:#888;padding:14px 28px;font-size:12px;text-align:center;border-top:1px solid #d9e1ec;">
+        Eastview Athletic Association · <a href="https://www.evaasports.org" style="color:#1B4F8C;">evaasports.org</a>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>`;
+  }
+
   // Generate a secure-ish random temp password meeting M365 complexity requirements.
   function generateTempPassword() {
     const upper = "ABCDEFGHJKMNPQRSTUVWXYZ";
@@ -1122,19 +1143,34 @@
       stepLog(`Group add failed: ${err.message}`, false);
     }
 
-    logAction("created user", `${first} ${last}`, newUserId, { upn, group: groupName, asOwner });
+    // 4. Auto-send welcome email
+    let emailSent = false;
+    try {
+      const subject = `Welcome to EVAA — your new ${domain === "evaasports.org" ? "Eastview Athletic Association" : "Apple Valley Fusion"} account`;
+      const adminMail = AUTH.getAccount()?.username || "web-admin@evaasports.org";
+      const html = buildWelcomeEmailHtml({ first, last, upn, password, groupName, jobTitle: jobTitle || "(not set)", adminMail });
+      await GRAPH.sendMail([personalEmail], subject, html);
+      stepLog(`Welcome email sent to ${personalEmail}`, true);
+      emailSent = true;
+    } catch (err) {
+      stepLog(`Welcome email failed: ${err.message}`, false);
+    }
 
-    // 4. Show result + temp password for admin to communicate
+    logAction("created user", `${first} ${last}`, newUserId, { upn, group: groupName, asOwner, emailSent });
+
+    // 5. Show result modal
     progress.classList.add("hidden");
     result.classList.remove("hidden");
+    const emailNotice = emailSent
+      ? `<p class="success-note">✓ Welcome email sent to <strong>${escapeHtml(personalEmail)}</strong>. The credentials below are also shown here in case you need them as a backup.</p>`
+      : `<p class="muted">Welcome email failed to send automatically — please email these credentials to <strong>${escapeHtml(personalEmail)}</strong> manually:</p>`;
     result.innerHTML = `<h4>✓ User created</h4>
-      <p>Send these credentials to <strong>${escapeHtml(personalEmail)}</strong>:</p>
+      ${emailNotice}
       <div class="cred-block">
         <div><strong>Sign-in:</strong> <code>${escapeHtml(upn)}</code></div>
         <div><strong>Temporary password:</strong> <code id="cu-pwd">${escapeHtml(password)}</code> <button id="cu-copy-pwd" class="btn-link">Copy</button></div>
         <div class="muted">User must change password on first sign-in.</div>
       </div>
-      <p class="muted">Phase 2.3 will send the welcome email automatically. For now, please email these credentials manually.</p>
       <div class="modal-actions">
         <button id="cu-done" class="btn-primary">Done</button>
       </div>`;
