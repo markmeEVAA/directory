@@ -370,7 +370,7 @@ td a:hover { text-decoration: underline; }
 .btn-remove:hover { background: #fce8e8; border-color: #c44; }
 .btn-remove:disabled { opacity: 0.4; cursor: wait; }
 
-/* Modal overlay for user search */
+/* Modal overlay for user search and dialogs */
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -378,15 +378,17 @@ td a:hover { text-decoration: underline; }
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding-top: 80px;
+  padding: 40px 16px;
+  overflow-y: auto;       /* allow the overlay itself to scroll if card is taller than viewport */
   z-index: 500;
 }
 .modal-card {
   background: #fff;
   border-radius: 8px;
   padding: 20px;
-  width: 90%;
+  width: 100%;
   max-width: 520px;
+  margin-bottom: 40px;    /* breathing room at the bottom when scrolling */
   box-shadow: 0 10px 40px rgba(0,0,0,0.2);
 }
 .modal-header {

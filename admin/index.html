@@ -306,8 +306,8 @@
             </select>
           </label>
           <label>
-            <span>UPN <span class="hint">(auto from name + domain)</span></span>
-            <input type="text" id="cu-upn" placeholder="(auto-filled)" />
+            <span>UPN <span class="hint">(auto from name + domain, read-only)</span></span>
+            <input type="text" id="cu-upn" placeholder="(auto-filled)" readonly tabindex="-1" />
           </label>
           <label>
             <span>Add to group *</span>
@@ -331,8 +331,8 @@
             <input type="text" id="cu-role-other" placeholder="e.g. Communications Lead" autocomplete="off" />
           </label>
           <label>
-            <span>Final job title <span class="hint">(auto-built from group + role; editable)</span></span>
-            <input type="text" id="cu-jobtitle" placeholder="(auto)" autocomplete="off" />
+            <span>Final job title <span class="hint">(auto-built from group + role, read-only)</span></span>
+            <input type="text" id="cu-jobtitle" placeholder="(auto)" readonly tabindex="-1" />
           </label>
           <label class="checkbox-label">
             <input type="checkbox" id="cu-as-owner" />
