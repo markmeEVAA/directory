@@ -11,7 +11,7 @@
     <div class="header-inner">
       <div class="header-brand">
         <img src="assets/evaa-logo.png" alt="EVAA logo" class="header-logo">
-        <h1>Admin Portal</h1>
+        <h1>Email Admin Portal</h1>
       </div>
       <div class="header-actions">
         <button id="help-btn" class="btn-link header-link" aria-label="Help">Need help?</button>
@@ -347,9 +347,27 @@
       </div>
     </div>
 
+    <!-- Custom confirm modal (replaces native confirm() — branded, friendly title) -->
+    <div id="confirm-modal" class="modal-overlay hidden">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3 id="confirm-modal-title">Email Admin Portal asks…</h3>
+        </div>
+        <div id="confirm-modal-body" class="confirm-body"></div>
+        <div class="modal-actions">
+          <button id="confirm-modal-cancel" class="btn-link">Cancel</button>
+          <button id="confirm-modal-ok" class="btn-primary">OK</button>
+        </div>
+      </div>
+    </div>
+
     <div id="error-banner" class="error-banner hidden">
       <span id="error-text"></span>
       <button id="error-close" aria-label="Dismiss">×</button>
+    </div>
+
+    <div id="toast-banner" class="toast-banner hidden">
+      <span id="toast-text"></span>
     </div>
   </main>
 

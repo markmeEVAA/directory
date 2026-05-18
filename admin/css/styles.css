@@ -304,6 +304,31 @@ td a:hover { text-decoration: underline; }
   line-height: 1;
 }
 
+/* Success toast (auto-dismissing) */
+.toast-banner {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  max-width: 380px;
+  padding: 12px 18px;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  z-index: 1000;
+  font-size: 0.95em;
+  transition: opacity 0.2s;
+}
+.toast-success { background: #28a745; color: #fff; }
+.toast-info { background: #1B4F8C; color: #fff; }
+
+/* Custom confirm modal body */
+.confirm-body {
+  padding: 4px 0 8px;
+  line-height: 1.5;
+}
+.confirm-body p { margin: 8px 0; }
+.confirm-body ul { margin: 6px 0; padding-left: 22px; }
+.confirm-body li { margin-bottom: 4px; }
+
 /* Section header (h3 + + Add button side-by-side) */
 .section-header {
   display: flex;

@@ -32,6 +32,48 @@
   }
   $("error-close").addEventListener("click", () => errorBanner.classList.add("hidden"));
 
+  // Toast for success feedback (green, auto-dismisses after 4s).
+  let toastTimer = null;
+  function showToast(msg, kind = "success") {
+    const banner = $("toast-banner");
+    $("toast-text").textContent = msg;
+    banner.className = "toast-banner toast-" + kind;
+    banner.classList.remove("hidden");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => banner.classList.add("hidden"), 4000);
+  }
+
+  // Branded replacement for native confirm(). Returns Promise<boolean>.
+  // Supports HTML body (so we can preserve formatting), custom OK button label/style.
+  function confirmCustom({ body, okLabel = "OK", okClass = "btn-primary", title = "Email Admin Portal asks…" }) {
+    return new Promise((resolve) => {
+      $("confirm-modal-title").textContent = title;
+      $("confirm-modal-body").innerHTML = body;
+      const okBtn = $("confirm-modal-ok");
+      const cancelBtn = $("confirm-modal-cancel");
+      okBtn.textContent = okLabel;
+      okBtn.className = okClass;
+      const modal = $("confirm-modal");
+      modal.classList.remove("hidden");
+      function cleanup(result) {
+        modal.classList.add("hidden");
+        okBtn.removeEventListener("click", onOk);
+        cancelBtn.removeEventListener("click", onCancel);
+        document.removeEventListener("keydown", onKey);
+        resolve(result);
+      }
+      function onOk() { cleanup(true); }
+      function onCancel() { cleanup(false); }
+      function onKey(e) {
+        if (e.key === "Escape") cleanup(false);
+        else if (e.key === "Enter") cleanup(true);
+      }
+      okBtn.addEventListener("click", onOk);
+      cancelBtn.addEventListener("click", onCancel);
+      document.addEventListener("keydown", onKey);
+    });
+  }
+
   envInfo.textContent = `Tenant evaasports.org · ${new Date().getFullYear()}`;
 
   // Wire sign-out buttons immediately (safe — guarded internally)
@@ -378,8 +420,20 @@
     const { userId, userName, otherManagedGroups, context } = pendingRemove;
     const fromGroupCtx = context !== "user" && currentDetailGroup;
     const totalGroups = (fromGroupCtx ? 1 : 0) + otherManagedGroups.length;
-    const confirmMsg = `Disable ${userName}'s account and preserve their data?\n\nThis will:\n  • Remove from ${totalGroups} managed group(s)\n  • Disable the account (can't sign in)\n  • KEEP the EVAA license (mailbox + OneDrive preserved indefinitely)\n  • Email portaladmins@evaasports.org with a summary\n\nLicense cost (~$3/mo) continues until you fully offboard.`;
-    if (!confirm(confirmMsg)) return;
+    const ok = await confirmCustom({
+      body: `<p>Disable <strong>${escapeHtml(userName)}</strong>'s account and preserve their data?</p>
+        <p>This will:</p>
+        <ul>
+          <li>Remove from ${totalGroups} managed group${totalGroups === 1 ? "" : "s"}</li>
+          <li>Disable the account (can't sign in)</li>
+          <li><strong>KEEP the EVAA license</strong> (mailbox + OneDrive preserved indefinitely)</li>
+          <li>Email portaladmins@evaasports.org with a summary</li>
+        </ul>
+        <p class="muted">License cost (~$3/mo) continues until you fully offboard.</p>`,
+      okLabel: "Disable & preserve",
+      okClass: "btn-warning",
+    });
+    if (!ok) return;
 
     $("remove-this-group-btn").disabled = true;
     $("remove-preserve-btn").disabled = true;
@@ -440,6 +494,7 @@
       logAction("disabled user with data preserved", userName, userId, { groupCount: allRemovedGroups.length, context: fromGroupCtx ? "group" : "user" });
 
       if (errors.length) showError(`Preserve-data action partial: ${errors.join("; ")}`);
+      else showToast(`${userName} disabled — data preserved, admins notified`);
       $("remove-panel").classList.add("hidden");
       pendingRemove = null;
       if (fromGroupCtx) await refreshDetail();
@@ -456,8 +511,20 @@
     const { userId, userName, otherManagedGroups, context } = pendingRemove;
     const fromGroupCtx = context !== "user" && currentDetailGroup;
     const totalGroups = (fromGroupCtx ? 1 : 0) + otherManagedGroups.length;
-    const confirmMsg = `Offboard ${userName} fully?\n\nThis will:\n  • Remove from ${totalGroups} managed group(s)\n  • Remove the EVAA license\n  • Disable the account\n\n⚠ Exchange will start a 30-day countdown to permanently delete the mailbox and OneDrive.\n\nThis cannot be undone via this UI (re-enable via Entra admin center if needed).`;
-    if (!confirm(confirmMsg)) return;
+    const ok = await confirmCustom({
+      body: `<p>Offboard <strong>${escapeHtml(userName)}</strong> fully?</p>
+        <p>This will:</p>
+        <ul>
+          <li>Remove from ${totalGroups} managed group${totalGroups === 1 ? "" : "s"}</li>
+          <li>Remove the EVAA license</li>
+          <li>Disable the account</li>
+        </ul>
+        <p class="warn-block">⚠ Exchange will start a <strong>30-day countdown</strong> to permanently delete the mailbox and OneDrive.</p>
+        <p class="muted">Re-enable via this portal or Entra admin center within 30 days to recover.</p>`,
+      okLabel: "Offboard fully",
+      okClass: "btn-danger",
+    });
+    if (!ok) return;
 
     $("remove-this-group-btn").disabled = true;
     $("remove-preserve-btn").disabled = true;
@@ -498,6 +565,8 @@
 
       if (errors.length > 0) {
         showError(`Offboard partial: ${errors.length} step(s) failed. ${errors.join("; ")}`);
+      } else {
+        showToast(`${userName} offboarded fully`);
       }
       $("remove-panel").classList.add("hidden");
       pendingRemove = null;
