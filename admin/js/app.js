@@ -37,6 +37,13 @@
   $("sign-out-btn").addEventListener("click", () => AUTH.signOut());
   $("signout-from-noaccess-btn").addEventListener("click", () => AUTH.signOut());
 
+  // Help modal — wired immediately (available even before sign-in)
+  $("help-btn").addEventListener("click", () => $("help-panel").classList.remove("hidden"));
+  $("help-close").addEventListener("click", () => $("help-panel").classList.add("hidden"));
+  $("help-panel").addEventListener("click", (e) => {
+    if (e.target.id === "help-panel") $("help-panel").classList.add("hidden"); // click backdrop to close
+  });
+
   // Boot: MSAL init + post-redirect handling.
   // Sign-in view stays hidden until init resolves so users can't click before MSAL is ready.
   show("loading");
@@ -718,6 +725,39 @@
     tbody.querySelectorAll(".link-button[data-jump-group-id]").forEach((b) => {
       b.addEventListener("click", () => jumpToGroup(b.dataset.jumpGroupId));
     });
+
+    renderViewAsPanel(user, userGroups || [], ownerIds);
+  }
+
+  // "Canvas portal preview" — shows what this user would see if they signed into the
+  // existing canvas portal (admin vs sport-director view).
+  function renderViewAsPanel(user, memberGroups, ownerIdSet) {
+    const PORTAL_ADMINS_GROUP_ID = "98d51c39-149a-4dbf-9e86-1510035d8239";
+    const isAdmin = memberGroups.some((g) => g.id === PORTAL_ADMINS_GROUP_ID);
+    const summary = $("view-as-summary");
+    const list = $("view-as-groups");
+
+    if (isAdmin) {
+      summary.innerHTML = `<strong>${escapeHtml(user.displayName)}</strong> is a member of <em>EVAA Portal Admins</em>. In the canvas portal, they would see <strong>all ${state.groups.length} managed groups</strong> in the SportPicker (admin path).`;
+      list.innerHTML = "";
+      return;
+    }
+
+    // Non-admin path: canvas portal shows groups they OWN (filtered to EVAA/Fusion).
+    const managedIds = new Set(state.groups.map((g) => g.id));
+    const ownedManaged = state.groups.filter((g) => managedIds.has(g.id) && ownerIdSet.has(g.id));
+
+    if (ownedManaged.length === 0) {
+      summary.innerHTML = `<strong>${escapeHtml(user.displayName)}</strong> is not a portal admin and does not own any managed groups. They would see the canvas portal's <em>no access</em> message ("You don't have access to this portal. Contact web-admin@evaasports.org for help.")`;
+      list.innerHTML = "";
+      return;
+    }
+
+    summary.innerHTML = `<strong>${escapeHtml(user.displayName)}</strong> is not a portal admin. In the canvas portal they would see <strong>${ownedManaged.length} group${ownedManaged.length === 1 ? "" : "s"}</strong> in their SportPicker (groups they own):`;
+    list.innerHTML = ownedManaged
+      .sort((a, b) => (a.displayName || "").localeCompare(b.displayName || ""))
+      .map((g) => `<li>${escapeHtml(g.displayName)}</li>`)
+      .join("");
   }
 
   function jumpToGroup(groupId) {

@@ -27,6 +27,41 @@ header {
   align-items: center;
   max-width: 1100px;
   margin: 0 auto;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-logo {
+  height: 40px;
+  width: auto;
+  border-radius: 4px;
+  background: #fff;
+  padding: 2px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-link {
+  color: #fff !important;
+  text-decoration: none !important;
+  border: 1px solid rgba(255,255,255,0.4);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 0.85em;
+}
+.header-link:hover {
+  background: rgba(255,255,255,0.1);
+  border-color: rgba(255,255,255,0.7);
 }
 
 header h1 {
@@ -665,6 +700,42 @@ td a:hover { text-decoration: underline; }
   min-width: 100px;
   text-align: center;
 }
+
+/* Help modal — wider for readable content */
+.help-card { max-width: 720px; max-height: 80vh; overflow-y: auto; }
+.help-content h4 {
+  color: #1B4F8C;
+  margin-top: 20px;
+  margin-bottom: 6px;
+  font-size: 1em;
+}
+.help-content h4:first-child { margin-top: 0; }
+.help-content ul { margin-top: 4px; padding-left: 24px; }
+.help-content li { margin-bottom: 6px; line-height: 1.5; }
+.help-content p { line-height: 1.5; }
+.help-content code,
+.help-content em { font-style: italic; color: #444; }
+
+/* "View as user" / canvas portal preview panel */
+.view-as-panel {
+  background: #f5f8fc;
+  border: 1px solid #d9e1ec;
+  border-radius: 6px;
+  padding: 14px 18px;
+  margin-top: 8px;
+  margin-bottom: 16px;
+}
+.view-as-panel p { margin: 0; line-height: 1.5; }
+.view-as-groups {
+  margin: 10px 0 0 0;
+  padding-left: 20px;
+  list-style: disc;
+}
+.view-as-groups li {
+  margin-bottom: 4px;
+  font-size: 0.9em;
+}
+.muted.small { font-size: 0.75em; font-weight: 400; }
 
 /* Mobile */
 @media (max-width: 700px) {

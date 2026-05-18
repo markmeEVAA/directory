@@ -9,10 +9,16 @@
 <body>
   <header>
     <div class="header-inner">
-      <h1>EVAA Admin Portal</h1>
-      <div id="user-area" class="hidden">
-        <span id="user-name"></span>
-        <button id="sign-out-btn" class="btn-link">Sign out</button>
+      <div class="header-brand">
+        <img src="assets/evaa-logo.jpg" alt="EVAA logo" class="header-logo">
+        <h1>Admin Portal</h1>
+      </div>
+      <div class="header-actions">
+        <button id="help-btn" class="btn-link header-link" aria-label="Help">? Help</button>
+        <div id="user-area" class="hidden">
+          <span id="user-name"></span>
+          <button id="sign-out-btn" class="btn-link">Sign out</button>
+        </div>
       </div>
     </div>
   </header>
@@ -161,9 +167,63 @@
           <tbody id="user-groups-tbody"></tbody>
         </table>
       </div>
+
+      <div class="section-header">
+        <h3>Canvas portal preview <span class="muted small">(what this user would see if they signed in)</span></h3>
+      </div>
+      <div id="view-as-panel" class="view-as-panel">
+        <p id="view-as-summary" class="muted">Loading…</p>
+        <ul id="view-as-groups" class="view-as-groups"></ul>
+      </div>
     </section>
 
     <!-- ============ MODALS ============ -->
+
+    <!-- Help / Instructions modal -->
+    <div id="help-panel" class="modal-overlay hidden">
+      <div class="modal-card help-card">
+        <div class="modal-header">
+          <h3>How this portal works</h3>
+          <button id="help-close" class="modal-close" aria-label="Close">×</button>
+        </div>
+        <div class="help-content">
+          <h4>What this is</h4>
+          <p>Self-service admin tool for managing M365 group memberships, board members, and user accounts. Restricted to members of the <strong>EVAA Portal Admins</strong> group. All actions write directly to Microsoft 365 via Graph — no approval routing for admin actions.</p>
+
+          <h4>Manage Groups tab</h4>
+          <ul>
+            <li><strong>Group list:</strong> every EVAA / Fusion managed group. Click any row to drill in.</li>
+            <li><strong>Group detail:</strong> see Directors (owners) and Members in two tables. <em>+ Add Director</em> / <em>+ Add Member</em> opens a user search; click a result to add. Or click <em>+ Create new user</em> to onboard a brand-new user from scratch.</li>
+            <li><strong>× button</strong> on a row: opens a smart remove dialog. You can choose <em>Remove from this group only</em> (just unlinks) or <em>Offboard fully</em> (removes from all managed groups + removes the EVAA license + disables the account).</li>
+          </ul>
+
+          <h4>Manage Members tab</h4>
+          <ul>
+            <li><strong>User list:</strong> all enabled @evaasports.org and @avfusion.org users, sortable + filterable + paginated 25 per page.</li>
+            <li><strong>User detail:</strong> see what groups the user belongs to (with Member / Owner / Member + Owner badges), their job title, account state.</li>
+            <li><strong>Inline edit:</strong> the ✎ pencil next to the display name or job title lets you change it on the fly.</li>
+            <li><strong>+ Add to group</strong>: adds this user to any managed group as a member.</li>
+            <li><strong>Offboard fully</strong>: same 3-step removal as the group view but starting from the user.</li>
+          </ul>
+
+          <h4>Creating new users</h4>
+          <p>The <em>+ Create new user</em> button (in either tab) opens a form that creates the M365 account, assigns the EVAA license, and adds them to a chosen group — all in one shot. A temp password is generated; copy it and email it to the user. They'll be forced to change it on first sign-in.</p>
+
+          <h4>Cross-navigation</h4>
+          <p>Click any group name on the User Detail page → jumps to that group's detail. Click any person name on the Group Detail page → jumps to that user's detail. The tab indicator updates automatically.</p>
+
+          <h4>What's NOT here yet</h4>
+          <ul>
+            <li>Send password reset (next)</li>
+            <li>Auto-send welcome email when creating a new user (currently you copy + email manually)</li>
+            <li>Audit log to a SharePoint list (currently logs only to the browser console — open DevTools → Console to see)</li>
+          </ul>
+
+          <p class="muted footnote">Built with HTML/JS/MSAL/Graph. Source: <a href="https://github.com/markmeEVAA/directory/tree/main/admin" target="_blank">github.com/markmeEVAA/directory/admin</a></p>
+        </div>
+      </div>
+    </div>
+
 
     <!-- Add Director / Add Member (group → user picker) -->
     <div id="add-panel" class="modal-overlay hidden">
