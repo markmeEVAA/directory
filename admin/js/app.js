@@ -313,6 +313,9 @@
     const { userName, role, otherManagedGroups } = pendingRemove;
     const label = role === "owner" ? "director (owner)" : "member";
     $("remove-panel-title").textContent = `Remove ${userName}`;
+    // This handler always runs in group context (called from group-detail × button).
+    // Make sure the "Remove from this group only" button is visible.
+    $("remove-this-group-btn").style.display = "";
     const groupLine = `${userName} is currently a ${label} of <strong>${escapeHtml(currentDetailGroup.displayName)}</strong>.`;
     let bodyHtml = groupLine;
     if (otherManagedGroups.length > 0) {
@@ -367,29 +370,42 @@
   // "Disable account only (preserve data)" — middle option.
   // Removes from all managed groups, disables account, KEEPS the license so mailbox/OneDrive
   // stay preserved indefinitely. Emails portaladmins@ so the group can decide what to do next.
+  // Works in either group context (from group detail x) or user context (from user detail offboard).
   $("remove-preserve-btn").addEventListener("click", async () => {
-    if (!pendingRemove || !currentDetailGroup) return;
-    const { userId, userName, otherManagedGroups } = pendingRemove;
-    const confirmMsg = `Disable ${userName}'s account and preserve their data?\n\nThis will:\n  • Remove from this group + ${otherManagedGroups.length} other managed group(s)\n  • Disable the account (can't sign in)\n  • KEEP the EVAA license (mailbox + OneDrive preserved indefinitely)\n  • Email portaladmins@evaasports.org with a summary\n\nLicense cost (~$3/mo) continues until you fully offboard.`;
+    if (!pendingRemove) return;
+    const { userId, userName, otherManagedGroups, context } = pendingRemove;
+    const fromGroupCtx = context !== "user" && currentDetailGroup;
+    const totalGroups = (fromGroupCtx ? 1 : 0) + otherManagedGroups.length;
+    const confirmMsg = `Disable ${userName}'s account and preserve their data?\n\nThis will:\n  • Remove from ${totalGroups} managed group(s)\n  • Disable the account (can't sign in)\n  • KEEP the EVAA license (mailbox + OneDrive preserved indefinitely)\n  • Email portaladmins@evaasports.org with a summary\n\nLicense cost (~$3/mo) continues until you fully offboard.`;
     if (!confirm(confirmMsg)) return;
 
     $("remove-this-group-btn").disabled = true;
     $("remove-preserve-btn").disabled = true;
     $("remove-offboard-btn").disabled = true;
     const errors = [];
+    const allRemovedGroups = []; // for the admin email
 
     try {
-      // 1. Remove from this group
-      try {
-        if (pendingRemove.role === "owner") await GRAPH.removeOwner(currentDetailGroup.id, userId);
-        else await GRAPH.removeMember(currentDetailGroup.id, userId);
-      } catch (err) { errors.push(`current group: ${err.message}`); }
+      // 1. If in group context, remove from this group first
+      if (fromGroupCtx) {
+        try {
+          if (pendingRemove.role === "owner") await GRAPH.removeOwner(currentDetailGroup.id, userId);
+          else await GRAPH.removeMember(currentDetailGroup.id, userId);
+          allRemovedGroups.push({ displayName: currentDetailGroup.displayName });
+        } catch (err) { errors.push(`${currentDetailGroup.displayName}: ${err.message}`); }
+      }
 
       // 2. Remove from other managed groups (member + owner; whichever applies)
       for (const g of otherManagedGroups) {
-        try { await GRAPH.removeMember(g.id, userId); }
+        try {
+          await GRAPH.removeMember(g.id, userId);
+          allRemovedGroups.push({ displayName: g.displayName });
+        }
         catch (_) {
-          try { await GRAPH.removeOwner(g.id, userId); }
+          try {
+            await GRAPH.removeOwner(g.id, userId);
+            allRemovedGroups.push({ displayName: g.displayName });
+          }
           catch (e) { errors.push(`${g.displayName}: ${e.message}`); }
         }
       }
@@ -402,12 +418,13 @@
       try {
         const adminMail = AUTH.getAccount()?.username || "(unknown admin)";
         const adminName = AUTH.getAccount()?.name || adminMail;
-        const groupContextName = currentDetailGroup.displayName;
-        const removedGroupList = [{ displayName: groupContextName }, ...otherManagedGroups]
-          .map((g) => `<li>${escapeHtml(g.displayName)}</li>`).join("");
+        const groupContextName = fromGroupCtx ? currentDetailGroup.displayName : "user detail page";
+        const removedGroupsHtml = allRemovedGroups.length
+          ? allRemovedGroups.map((g) => `<li>${escapeHtml(g.displayName)}</li>`).join("")
+          : `<li><em>(no managed groups)</em></li>`;
         const html = buildPreserveDataAdminEmailHtml({
           adminName, adminMail, userName, userId,
-          groupContextName, removedGroupsHtml: removedGroupList,
+          groupContextName, removedGroupsHtml,
         });
         await GRAPH.sendMail(
           ["portaladmins@evaasports.org"],
@@ -418,12 +435,13 @@
         errors.push(`admin notify email: ${err.message}`);
       }
 
-      logAction("disabled user with data preserved", userName, userId, { groupCount: otherManagedGroups.length + 1 });
+      logAction("disabled user with data preserved", userName, userId, { groupCount: allRemovedGroups.length, context: fromGroupCtx ? "group" : "user" });
 
       if (errors.length) showError(`Preserve-data action partial: ${errors.join("; ")}`);
       $("remove-panel").classList.add("hidden");
       pendingRemove = null;
-      await refreshDetail();
+      if (fromGroupCtx) await refreshDetail();
+      else await refreshUserDetail();
     } finally {
       $("remove-this-group-btn").disabled = false;
       $("remove-preserve-btn").disabled = false;
@@ -432,64 +450,56 @@
   });
 
   $("remove-offboard-btn").addEventListener("click", async () => {
-    if (!pendingRemove || !currentDetailGroup) return;
-    const { userId, userName, otherManagedGroups } = pendingRemove;
-    const confirmMsg = `Offboard ${userName} fully?\n\nThis will:\n  • Remove from this group + ${otherManagedGroups.length} other managed group(s)\n  • Remove the EVAA license\n  • Disable the account\n\nThis cannot be undone via this UI (re-enable via Entra admin center if needed).`;
+    if (!pendingRemove) return;
+    const { userId, userName, otherManagedGroups, context } = pendingRemove;
+    const fromGroupCtx = context !== "user" && currentDetailGroup;
+    const totalGroups = (fromGroupCtx ? 1 : 0) + otherManagedGroups.length;
+    const confirmMsg = `Offboard ${userName} fully?\n\nThis will:\n  • Remove from ${totalGroups} managed group(s)\n  • Remove the EVAA license\n  • Disable the account\n\n⚠ Exchange will start a 30-day countdown to permanently delete the mailbox and OneDrive.\n\nThis cannot be undone via this UI (re-enable via Entra admin center if needed).`;
     if (!confirm(confirmMsg)) return;
 
     $("remove-this-group-btn").disabled = true;
+    $("remove-preserve-btn").disabled = true;
     $("remove-offboard-btn").disabled = true;
     const errors = [];
 
     try {
-      // 1. Remove from THIS group (covers the current view's role)
-      try {
-        if (pendingRemove.role === "owner") {
-          await GRAPH.removeOwner(currentDetailGroup.id, userId);
-        } else {
-          await GRAPH.removeMember(currentDetailGroup.id, userId);
-        }
-      } catch (err) {
-        errors.push(`current group: ${err.message}`);
+      // 1. If in group context, remove from this group
+      if (fromGroupCtx) {
+        try {
+          if (pendingRemove.role === "owner") await GRAPH.removeOwner(currentDetailGroup.id, userId);
+          else await GRAPH.removeMember(currentDetailGroup.id, userId);
+        } catch (err) { errors.push(`${currentDetailGroup.displayName}: ${err.message}`); }
       }
 
-      // 2. Remove from all OTHER managed groups (members; owners are role-specific but we
-      //    aggressively unlink as member to be thorough).
+      // 2. Remove from all OTHER managed groups
       for (const g of otherManagedGroups) {
-        try {
-          await GRAPH.removeMember(g.id, userId);
-        } catch (err) {
-          // Try owner ref too (in case they were owner of that group, not member)
-          try { await GRAPH.removeOwner(g.id, userId); } catch (_) {
-            errors.push(`${g.displayName}: ${err.message}`);
-          }
+        try { await GRAPH.removeMember(g.id, userId); }
+        catch (_) {
+          try { await GRAPH.removeOwner(g.id, userId); }
+          catch (e) { errors.push(`${g.displayName}: ${e.message}`); }
         }
       }
 
       // 3. Remove EVAA license
-      try {
-        await GRAPH.removeUserLicense(userId);
-      } catch (err) {
-        errors.push(`license: ${err.message}`);
-      }
+      try { await GRAPH.removeUserLicense(userId); }
+      catch (err) { errors.push(`license: ${err.message}`); }
 
       // 4. Disable account
-      try {
-        await GRAPH.disableUserAccount(userId);
-      } catch (err) {
-        errors.push(`disable account: ${err.message}`);
-      }
+      try { await GRAPH.disableUserAccount(userId); }
+      catch (err) { errors.push(`disable account: ${err.message}`); }
 
-      logAction("offboarded fully", userName, userId);
+      logAction("offboarded fully", userName, userId, { context: fromGroupCtx ? "group" : "user" });
 
       if (errors.length > 0) {
         showError(`Offboard partial: ${errors.length} step(s) failed. ${errors.join("; ")}`);
       }
       $("remove-panel").classList.add("hidden");
       pendingRemove = null;
-      await refreshDetail();
+      if (fromGroupCtx) await refreshDetail();
+      else await refreshUserDetail();
     } finally {
       $("remove-this-group-btn").disabled = false;
+      $("remove-preserve-btn").disabled = false;
       $("remove-offboard-btn").disabled = false;
     }
   });
@@ -952,27 +962,43 @@
     }
   }
 
-  // Offboard user (from user detail view)
+  // Offboard user (from user detail view) — opens the same 3-option modal as the
+  // group-detail × button, but configured for user context (no "this group only" option).
   $("offboard-user-btn").addEventListener("click", async () => {
     if (!currentDetailUser) return;
     const u = currentDetailUser;
-    const groups = await GRAPH.getUserMemberOf(u.id).catch(() => []);
-    const managedIds = new Set(state.groups.map((g) => g.id));
-    const managedGroups = groups.filter((g) => managedIds.has(g.id));
-
-    const msg = `Offboard ${u.displayName} fully?\n\nThis will:\n  • Remove from ${managedGroups.length} managed group(s)\n  • Remove the EVAA license\n  • Disable the account\n\nThis cannot be undone via this UI.`;
-    if (!confirm(msg)) return;
-
-    const errors = [];
-    for (const g of managedGroups) {
-      try { await GRAPH.removeMember(g.id, u.id); }
-      catch (_) { try { await GRAPH.removeOwner(g.id, u.id); } catch (e) { errors.push(`${g.displayName}: ${e.message}`); } }
+    let managedGroups = [];
+    try {
+      const all = await GRAPH.getUserMemberOf(u.id);
+      const managedIds = new Set(state.groups.map((g) => g.id));
+      managedGroups = all.filter((g) => managedIds.has(g.id));
+    } catch (err) {
+      console.warn("Could not fetch user's groups for offboard modal:", err);
     }
-    try { await GRAPH.removeUserLicense(u.id); } catch (e) { errors.push(`license: ${e.message}`); }
-    try { await GRAPH.disableUserAccount(u.id); } catch (e) { errors.push(`disable: ${e.message}`); }
-    logAction("offboarded user fully (members view)", u.displayName, u.id);
-    if (errors.length) showError(`Offboard partial: ${errors.join("; ")}`);
-    await refreshUserDetail();
+
+    pendingRemove = {
+      context: "user",
+      userId: u.id,
+      userName: u.displayName,
+      role: "member",
+      btn: null,
+      otherManagedGroups: managedGroups, // ALL their managed groups (no "current group" concept)
+    };
+
+    $("remove-panel-title").textContent = `Remove ${u.displayName}`;
+    let body = `<strong>${escapeHtml(u.displayName)}</strong> is in <strong>${managedGroups.length}</strong> managed group${managedGroups.length === 1 ? "" : "s"}.`;
+    if (managedGroups.length > 0) body += " The actions below apply to all of them:";
+    $("remove-panel-body").innerHTML = body;
+    if (managedGroups.length > 0) {
+      $("remove-other-groups").innerHTML = managedGroups.map((g) => `<li>${escapeHtml(g.displayName)}</li>`).join("");
+      $("remove-other-groups").classList.remove("hidden");
+    } else {
+      $("remove-other-groups").innerHTML = "";
+      $("remove-other-groups").classList.add("hidden");
+    }
+    // Hide "Remove from this group only" — doesn't apply in user context
+    $("remove-this-group-btn").style.display = "none";
+    $("remove-panel").classList.remove("hidden");
   });
 
   // =====================================================================
