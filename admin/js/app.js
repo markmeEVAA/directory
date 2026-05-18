@@ -745,13 +745,17 @@
     });
 
     const stateBadge = $("user-account-state");
-    if (user.accountEnabled === false) {
+    const isDisabled = user.accountEnabled === false;
+    if (isDisabled) {
       stateBadge.textContent = "Disabled";
       stateBadge.className = "account-state-badge state-disabled";
     } else {
       stateBadge.textContent = "Active";
       stateBadge.className = "account-state-badge state-active";
     }
+    // Toggle action buttons based on account state
+    $("offboard-user-btn").classList.toggle("hidden", isDisabled);
+    $("reenable-user-btn").classList.toggle("hidden", !isDisabled);
 
     // Build a union of managed groups the user is a member of OR an owner of.
     const managedIds = new Set(state.groups.map((g) => g.id));
@@ -961,6 +965,33 @@
       showError(`Failed to add to group: ${err.message}`);
     }
   }
+
+  // Re-enable & re-license a disabled user — counterpart to Offboard fully.
+  // Re-enables the account, assigns the EVAA license back. Groups are admin-added manually.
+  $("reenable-user-btn").addEventListener("click", async () => {
+    if (!currentDetailUser) return;
+    const u = currentDetailUser;
+    const msg = `Re-enable ${u.displayName} and reassign the EVAA license?\n\nThis will:\n  • Set accountEnabled = true (user can sign in again)\n  • Reassign the EVAA M365 license (mailbox / OneDrive reactivated)\n\nGroups are NOT re-added automatically — use + Add to group afterward for any groups they should rejoin.\n\nIf they don't remember their password, they'll need to reset it via the standard 'Forgot password' link on the M365 sign-in page (or you can set a new one later when Password Reset is built).`;
+    if (!confirm(msg)) return;
+
+    const btn = $("reenable-user-btn");
+    btn.disabled = true;
+    const origText = btn.textContent;
+    btn.textContent = "Working…";
+    const errors = [];
+    try {
+      try { await GRAPH.enableUserAccount(u.id); }
+      catch (err) { errors.push(`enable: ${err.message}`); }
+      try { await GRAPH.assignUserLicense(u.id); }
+      catch (err) { errors.push(`license: ${err.message}`); }
+      logAction("re-enabled & re-licensed user", u.displayName, u.id);
+      if (errors.length) showError(`Re-enable partial: ${errors.join("; ")}`);
+      await refreshUserDetail();
+    } finally {
+      btn.disabled = false;
+      btn.textContent = origText;
+    }
+  });
 
   // Offboard user (from user detail view) — opens the same 3-option modal as the
   // group-detail × button, but configured for user context (no "this group only" option).
