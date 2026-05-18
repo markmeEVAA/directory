@@ -229,12 +229,29 @@
             <input type="text" id="cu-upn" placeholder="(auto-filled)" />
           </label>
           <label>
-            <span>Job title <span class="hint">(e.g. "Baseball: President")</span></span>
-            <input type="text" id="cu-jobtitle" placeholder="Optional" autocomplete="off" />
-          </label>
-          <label>
             <span>Add to group *</span>
             <select id="cu-group" required></select>
+          </label>
+          <label>
+            <span>Role</span>
+            <select id="cu-role">
+              <option value="">— select a role —</option>
+              <option value="President">President</option>
+              <option value="Vice President">Vice President</option>
+              <option value="Treasurer">Treasurer</option>
+              <option value="Secretary">Secretary</option>
+              <option value="Board Member">Board Member</option>
+              <option value="Director">Director</option>
+              <option value="Other">Other (specify)</option>
+            </select>
+          </label>
+          <label id="cu-role-other-wrap" class="hidden">
+            <span>Custom role</span>
+            <input type="text" id="cu-role-other" placeholder="e.g. Communications Lead" autocomplete="off" />
+          </label>
+          <label>
+            <span>Final job title <span class="hint">(auto-built from group + role; editable)</span></span>
+            <input type="text" id="cu-jobtitle" placeholder="(auto)" autocomplete="off" />
           </label>
           <label class="checkbox-label">
             <input type="checkbox" id="cu-as-owner" />

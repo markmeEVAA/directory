@@ -717,6 +717,10 @@
     $("create-user-form").reset();
     $("cu-domain").value = "evaasports.org";
     $("cu-upn").value = "";
+    $("cu-jobtitle").value = "";
+    $("cu-role-other-wrap").classList.add("hidden");
+    upnDirty = false;
+    jobTitleDirty = false;
     // Populate group dropdown
     const sel = $("cu-group");
     sel.innerHTML = state.groups
@@ -758,6 +762,48 @@
   $("cu-first").addEventListener("input", recomputeUpn);
   $("cu-last").addEventListener("input", recomputeUpn);
   $("cu-domain").addEventListener("change", recomputeUpn);
+
+  // Auto-build jobTitle from selected group + role (unless user manually edited).
+  // Uses the production "Sport: Role" convention (e.g. "Baseball: President").
+  // Strips common prefixes like "EVAA - " or "Fusion - " from the group name.
+  let jobTitleDirty = false;
+  $("cu-jobtitle").addEventListener("input", () => { jobTitleDirty = true; });
+
+  function stripGroupPrefix(displayName) {
+    if (!displayName) return "";
+    return displayName
+      .replace(/^EVAA\s*-\s*Financial\s+Aid\s*-\s*/i, "Financial Aid - ")
+      .replace(/^EVAA\s*-\s*/i, "")
+      .replace(/^Fusion\s*-\s*/i, "Fusion ")
+      .trim();
+  }
+
+  function recomputeJobTitle() {
+    if (jobTitleDirty) return;
+    const groupId = $("cu-group").value;
+    const group = state.groups.find((g) => g.id === groupId);
+    const roleSelect = $("cu-role").value;
+    const roleOther = $("cu-role-other").value.trim();
+    const role = roleSelect === "Other" ? roleOther : roleSelect;
+    if (!group || !role) { $("cu-jobtitle").value = ""; return; }
+    const sport = stripGroupPrefix(group.displayName);
+    // Leadership group uses bare-role convention (no prefix) per project state
+    if (group.displayName === "EVAA - Leadership") {
+      $("cu-jobtitle").value = role;
+    } else {
+      $("cu-jobtitle").value = `${sport}: ${role}`;
+    }
+  }
+
+  // Toggle the "Other" custom-role input when "Other" is picked
+  $("cu-role").addEventListener("change", () => {
+    const isOther = $("cu-role").value === "Other";
+    $("cu-role-other-wrap").classList.toggle("hidden", !isOther);
+    if (!isOther) $("cu-role-other").value = "";
+    recomputeJobTitle();
+  });
+  $("cu-role-other").addEventListener("input", recomputeJobTitle);
+  $("cu-group").addEventListener("change", recomputeJobTitle);
 
   $("create-user-form").addEventListener("submit", async (e) => {
     e.preventDefault();
