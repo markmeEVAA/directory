@@ -113,12 +113,23 @@
     <!-- ============ MEMBERS TAB ============ -->
     <section id="members-view" class="view hidden">
       <div class="toolbar">
-        <input type="search" id="member-search-input" placeholder="Search by name or email (min 2 chars)…" />
+        <input type="search" id="member-search-input" placeholder="Filter by name, email, or UPN…" />
+        <span id="members-count" class="muted"></span>
         <button id="create-user-from-members-btn" class="btn-secondary">+ Create new user</button>
       </div>
-      <div id="member-search-results-list" class="member-list">
-        <p class="muted empty-hint">Start typing to find a member, or click "+ Create new user" to onboard someone new.</p>
+      <div id="members-list-table-container">
+        <table id="members-list-table">
+          <thead>
+            <tr>
+              <th data-mcol="0">Name<span class="arrow"></span></th>
+              <th data-mcol="1">UPN / Email<span class="arrow"></span></th>
+              <th data-mcol="2">Role<span class="arrow"></span></th>
+            </tr>
+          </thead>
+          <tbody id="members-list-tbody"></tbody>
+        </table>
       </div>
+      <div id="members-pagination" class="pagination"></div>
     </section>
 
     <section id="user-detail-view" class="view hidden">

@@ -646,6 +646,26 @@ td a:hover { text-decoration: underline; }
 .link-button:hover { text-decoration: underline; }
 .link-button:focus { outline: 2px solid rgba(27,79,140,0.3); border-radius: 2px; }
 
+/* Pagination controls */
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 0;
+  font-size: 0.9em;
+}
+.pagination button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+.page-indicator {
+  color: #555;
+  min-width: 100px;
+  text-align: center;
+}
+
 /* Mobile */
 @media (max-width: 700px) {
   main { padding: 12px; }

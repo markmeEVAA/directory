@@ -75,6 +75,29 @@ const GRAPH = (() => {
     return callGraphAll(path);
   }
 
+  // List all enabled users in the EVAA + Fusion domains.
+  // Used by the Manage Members tab for the paginated all-users view.
+  async function listAllManagedUsers() {
+    const filter = "accountEnabled eq true and (endswith(userPrincipalName,'@evaasports.org') or endswith(userPrincipalName,'@avfusion.org'))";
+    const select = "id,displayName,mail,userPrincipalName,jobTitle,accountEnabled";
+    // endswith requires advanced query, which requires ConsistencyLevel: eventual + $count
+    const path = `/users?$filter=${encodeURIComponent(filter)}&$select=${select}&$count=true&$top=999`;
+    const token = await AUTH.getToken();
+    const resp = await fetch(`${BASE}${path}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        ConsistencyLevel: "eventual",
+      },
+    });
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => "");
+      throw new Error(`Graph ${resp.status}: ${body.slice(0, 300)}`);
+    }
+    const data = await resp.json();
+    return data.value || [];
+  }
+
   // User search (for picking someone to add as owner/member).
   // Filters to enabled users in @evaasports.org and @avfusion.org.
   async function searchUsers(query) {
@@ -200,6 +223,7 @@ const GRAPH = (() => {
     listManagedGroups,
     listGroupMembers,
     listGroupOwners,
+    listAllManagedUsers,
     searchUsers,
     addOwner, removeOwner,
     addMember, removeMember,

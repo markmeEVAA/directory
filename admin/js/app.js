@@ -176,7 +176,7 @@
       activeTab = btn.dataset.tab;
       document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b === btn));
       if (activeTab === "groups") show("groups");
-      else show("members");
+      else { show("members"); ensureMembersLoaded(); }
     });
   });
 
@@ -504,33 +504,112 @@
   // =====================================================================
 
   let currentDetailUser = null; // the user currently shown in user-detail-view
-  let memberSearchDebounce;
+
+  // Members tab state: full user cache, current filter, pagination
+  const membersState = {
+    allUsers: null, // null = not yet loaded
+    filterText: "",
+    sortCol: 0, // 0=Name, 1=UPN/Email, 2=Role/jobTitle
+    sortDir: 1,
+    page: 0,
+    pageSize: 25,
+  };
+
+  async function ensureMembersLoaded() {
+    if (membersState.allUsers !== null) return;
+    $("members-list-tbody").innerHTML = `<tr><td colspan="3" class="loading">Loading users…</td></tr>`;
+    try {
+      const users = await GRAPH.listAllManagedUsers();
+      membersState.allUsers = users;
+      renderMembersPage();
+    } catch (err) {
+      $("members-list-tbody").innerHTML = `<tr><td colspan="3" class="muted">Failed to load users: ${escapeHtml(err.message)}</td></tr>`;
+      showError("Failed to load users: " + err.message);
+    }
+  }
+
+  function filteredSortedMembers() {
+    const f = membersState.filterText.toLowerCase();
+    const out = (membersState.allUsers || []).filter((u) =>
+      !f ||
+      (u.displayName || "").toLowerCase().includes(f) ||
+      (u.userPrincipalName || "").toLowerCase().includes(f) ||
+      (u.mail || "").toLowerCase().includes(f) ||
+      (u.jobTitle || "").toLowerCase().includes(f)
+    );
+    out.sort((a, b) => {
+      const dir = membersState.sortDir;
+      const col = membersState.sortCol;
+      const pick = (u) => col === 0 ? (u.displayName || "") : col === 1 ? (u.userPrincipalName || u.mail || "") : (u.jobTitle || "");
+      const aVal = pick(a).toLowerCase();
+      const bVal = pick(b).toLowerCase();
+      if (aVal < bVal) return -1 * dir;
+      if (aVal > bVal) return 1 * dir;
+      return 0;
+    });
+    return out;
+  }
+
+  function renderMembersPage() {
+    const rows = filteredSortedMembers();
+    const totalPages = Math.max(1, Math.ceil(rows.length / membersState.pageSize));
+    if (membersState.page >= totalPages) membersState.page = totalPages - 1;
+    if (membersState.page < 0) membersState.page = 0;
+    const start = membersState.page * membersState.pageSize;
+    const pageRows = rows.slice(start, start + membersState.pageSize);
+
+    $("members-count").textContent = `${rows.length} user${rows.length === 1 ? "" : "s"}${membersState.filterText ? ` matching "${membersState.filterText}"` : ""}`;
+
+    const tbody = $("members-list-tbody");
+    if (!pageRows.length) {
+      tbody.innerHTML = `<tr><td colspan="3" class="muted">No matches.</td></tr>`;
+    } else {
+      tbody.innerHTML = pageRows.map((u) => `<tr data-user-id="${escapeHtml(u.id)}">
+        <td><button class="link-button" data-jump-user-id="${escapeHtml(u.id)}" data-user-name="${escapeHtml(u.displayName)}">${escapeHtml(u.displayName)}</button></td>
+        <td>${escapeHtml(u.userPrincipalName || u.mail || "")}</td>
+        <td>${escapeHtml(u.jobTitle || "")}</td>
+      </tr>`).join("");
+      tbody.querySelectorAll(".link-button[data-jump-user-id]").forEach((b) => {
+        b.addEventListener("click", () => openUserDetail(b.dataset.jumpUserId, { id: b.dataset.jumpUserId, displayName: b.dataset.userName }));
+      });
+    }
+
+    // Sort arrows
+    document.querySelectorAll("#members-list-table thead th[data-mcol]").forEach((th, i) => {
+      th.classList.toggle("sorted", i === membersState.sortCol);
+      const arrow = th.querySelector(".arrow");
+      if (arrow) arrow.textContent = i === membersState.sortCol ? (membersState.sortDir === 1 ? "▲" : "▼") : "▽";
+    });
+
+    // Pagination controls
+    const pag = $("members-pagination");
+    if (totalPages <= 1) {
+      pag.innerHTML = "";
+    } else {
+      pag.innerHTML = `
+        <button class="btn-link page-prev" ${membersState.page === 0 ? "disabled" : ""}>← Prev</button>
+        <span class="page-indicator">Page ${membersState.page + 1} of ${totalPages}</span>
+        <button class="btn-link page-next" ${membersState.page >= totalPages - 1 ? "disabled" : ""}>Next →</button>
+      `;
+      pag.querySelector(".page-prev")?.addEventListener("click", () => { membersState.page--; renderMembersPage(); });
+      pag.querySelector(".page-next")?.addEventListener("click", () => { membersState.page++; renderMembersPage(); });
+    }
+  }
 
   $("member-search-input").addEventListener("input", (e) => {
-    const q = e.target.value.trim();
-    clearTimeout(memberSearchDebounce);
-    const list = $("member-search-results-list");
-    if (q.length < 2) {
-      list.innerHTML = `<p class="muted empty-hint">Start typing to find a member, or click "+ Create new user" to onboard someone new.</p>`;
-      return;
-    }
-    list.innerHTML = `<p class="loading">Searching…</p>`;
-    memberSearchDebounce = setTimeout(async () => {
-      try {
-        const users = await GRAPH.searchUsers(q);
-        if (!users.length) { list.innerHTML = `<p class="muted">No users found matching "${escapeHtml(q)}".</p>`; return; }
-        list.innerHTML = users.map((u) => `<button class="user-result" data-user-id="${escapeHtml(u.id)}">
-          <span class="user-name">${escapeHtml(u.displayName)}</span>
-          <span class="user-mail muted">${escapeHtml(u.mail || u.userPrincipalName || "")}</span>
-          <span class="user-jobtitle muted">${escapeHtml(u.jobTitle || "")}</span>
-        </button>`).join("");
-        list.querySelectorAll(".user-result").forEach((btn) => {
-          btn.addEventListener("click", () => openUserDetail(btn.dataset.userId, users.find((u) => u.id === btn.dataset.userId)));
-        });
-      } catch (err) {
-        showError("Search failed: " + err.message);
-      }
-    }, 250);
+    membersState.filterText = e.target.value.trim();
+    membersState.page = 0;
+    renderMembersPage();
+  });
+
+  // Wire sort handlers
+  document.querySelectorAll("#members-list-table thead th[data-mcol]").forEach((th) => {
+    th.addEventListener("click", () => {
+      const col = parseInt(th.dataset.mcol, 10);
+      if (membersState.sortCol === col) membersState.sortDir *= -1;
+      else { membersState.sortCol = col; membersState.sortDir = 1; }
+      renderMembersPage();
+    });
   });
 
   async function openUserDetail(userId, userCache) {
@@ -618,9 +697,9 @@
       const isOwner = ownerIds.has(g.id);
       let roleCell;
       if (isMember && isOwner) {
-        roleCell = `<span class="role-badge role-both">Member + Director</span>`;
+        roleCell = `<span class="role-badge role-both">Member + Owner</span>`;
       } else if (isOwner) {
-        roleCell = `<span class="role-badge role-owner">Director only</span>`;
+        roleCell = `<span class="role-badge role-owner">Owner</span>`;
       } else {
         roleCell = `<span class="role-badge role-member">Member</span>`;
       }
@@ -650,6 +729,7 @@
   function jumpToUser(userId, userCache) {
     activeTab = "members";
     document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === "members"));
+    ensureMembersLoaded(); // load in background so back-to-members lands on a populated table
     openUserDetail(userId, userCache);
   }
 
@@ -754,6 +834,7 @@
   $("back-to-members-btn").addEventListener("click", () => {
     currentDetailUser = null;
     show("members");
+    ensureMembersLoaded();
   });
 
   // Add to group (from user detail)
