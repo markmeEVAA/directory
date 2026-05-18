@@ -585,7 +585,7 @@
   function openAddPanel(role) {
     if (!currentDetailGroup) return;
     addTarget = role;
-    const label = role === "owner" ? "director" : "member";
+    const label = role === "owner" ? "owner" : "member";
     $("add-panel-title").textContent = `Add ${label} to "${currentDetailGroup.displayName}"`;
     $("add-search-input").value = "";
     $("add-search-results").innerHTML = "";
@@ -631,8 +631,22 @@
 
   async function addPickedUser(userId, userName) {
     if (!currentDetailGroup || !addTarget) return;
-    const label = addTarget === "owner" ? "director (owner)" : "member";
-    if (!confirm(`Add ${userName} as ${label} of "${currentDetailGroup.displayName}"?`)) return;
+    const groupName = currentDetailGroup.displayName;
+
+    let body;
+    if (addTarget === "owner") {
+      body = `<p>Are you sure you want to add <strong>${escapeHtml(userName)}</strong> as an owner of <strong>${escapeHtml(groupName)}</strong>?</p>
+        <p>Owners (also known as <em>directors</em>) can <strong>add and remove members</strong> from this group and will receive admin notifications for this group.</p>`;
+    } else {
+      body = `<p>Add <strong>${escapeHtml(userName)}</strong> as a member of <strong>${escapeHtml(groupName)}</strong>?</p>
+        <p class="muted">Members can read the group's emails and shared files but cannot manage other members.</p>`;
+    }
+    const ok = await confirmCustom({
+      body,
+      okLabel: addTarget === "owner" ? "Add as Owner" : "Add as Member",
+      okClass: "btn-primary",
+    });
+    if (!ok) return;
 
     try {
       if (addTarget === "owner") {
@@ -642,6 +656,7 @@
       }
       logAction(`added ${addTarget}`, userName, userId);
       closeAddPanel();
+      showToast(`${userName} added as ${addTarget === "owner" ? "owner" : "member"}`);
       await refreshDetail();
     } catch (err) {
       showError(`Failed to add ${userName}: ${err.message}`);
