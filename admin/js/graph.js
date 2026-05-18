@@ -56,10 +56,12 @@ const GRAPH = (() => {
   }
 
   // All EVAA/Fusion Unified groups (matches the existing helper-flow filter).
+  // Note: no $orderby — Graph requires ConsistencyLevel:eventual header to combine
+  // $filter+$orderby in advanced-query mode, and the JS already sorts client-side.
   async function listManagedGroups() {
     const filter = "(startswith(displayName,'EVAA') or startswith(displayName,'Fusion')) and groupTypes/any(c:c eq 'Unified')";
     const select = "id,displayName,mail,groupTypes,description";
-    const path = `/groups?$filter=${encodeURIComponent(filter)}&$select=${select}&$orderby=displayName&$top=100`;
+    const path = `/groups?$filter=${encodeURIComponent(filter)}&$select=${select}&$top=100`;
     return callGraphAll(path);
   }
 
