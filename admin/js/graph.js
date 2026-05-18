@@ -120,6 +120,13 @@ const GRAPH = (() => {
     return callGraphAll(path);
   }
 
+  // Get all groups owned by this user (returns group objects).
+  // Used to show "Member" vs "Director" vs "Both" on the user detail view.
+  async function getUserOwnedGroups(userId) {
+    const path = `/users/${userId}/ownedObjects/microsoft.graph.group?$select=id,displayName,mail&$top=200`;
+    return callGraphAll(path);
+  }
+
   // EVAA Standard license SKU (from project state file line 197 / 207).
   const EVAA_LICENSE_SKU_ID = "3b555118-da6a-4418-894f-7df1e2096870";
 
@@ -197,6 +204,7 @@ const GRAPH = (() => {
     addOwner, removeOwner,
     addMember, removeMember,
     getUserMemberOf,
+    getUserOwnedGroups,
     removeUserLicense,
     disableUserAccount,
     enableUserAccount,

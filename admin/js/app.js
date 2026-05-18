@@ -534,16 +534,17 @@
     $("user-detail-jobtitle").textContent = "";
     $("user-account-state").textContent = "";
     $("user-account-state").className = "account-state-badge";
-    $("user-groups-tbody").innerHTML = `<tr><td colspan="3" class="loading">Loading…</td></tr>`;
+    $("user-groups-tbody").innerHTML = `<tr><td colspan="4" class="loading">Loading…</td></tr>`;
     $("user-groups-count").textContent = "";
 
     try {
-      const [fullUser, userGroups] = await Promise.all([
+      const [fullUser, userGroups, ownedGroups] = await Promise.all([
         fetchUserBasic(userId),
         GRAPH.getUserMemberOf(userId),
+        GRAPH.getUserOwnedGroups(userId).catch(() => []),
       ]);
       currentDetailUser = fullUser;
-      renderUserDetail(fullUser, userGroups);
+      renderUserDetail(fullUser, userGroups, ownedGroups);
     } catch (err) {
       showError("Failed to load user: " + err.message);
     }
@@ -558,7 +559,7 @@
     return resp.json();
   }
 
-  function renderUserDetail(user, userGroups) {
+  function renderUserDetail(user, userGroups, ownedGroups) {
     // Display name with inline edit
     const nameEl = $("user-detail-name");
     nameEl.innerHTML = `<span class="editable-text" data-field="displayName">${escapeHtml(user.displayName || "(no name)")}</span> <button class="btn-edit-inline" data-field="displayName" data-current="${escapeHtml(user.displayName || "")}" aria-label="Edit display name">✎</button>`;
@@ -583,21 +584,47 @@
       stateBadge.className = "account-state-badge state-active";
     }
 
-    // Filter user's groups to MANAGED ones (EVAA/Fusion Unified) — the only ones admin actions apply to
+    // Build a union of managed groups the user is a member of OR an owner of.
     const managedIds = new Set(state.groups.map((g) => g.id));
-    const managed = (userGroups || []).filter((g) => managedIds.has(g.id));
-    $("user-groups-count").textContent = managed.length;
+    const memberIds = new Set((userGroups || []).filter((g) => managedIds.has(g.id)).map((g) => g.id));
+    const ownerIds = new Set((ownedGroups || []).filter((g) => managedIds.has(g.id)).map((g) => g.id));
+    const allRelevantIds = new Set([...memberIds, ...ownerIds]);
+
+    // Group object lookup (combine member-set and owner-set entries since group records overlap)
+    const groupLookup = new Map();
+    (userGroups || []).forEach((g) => groupLookup.set(g.id, g));
+    (ownedGroups || []).forEach((g) => { if (!groupLookup.has(g.id)) groupLookup.set(g.id, g); });
+
+    const relevant = Array.from(allRelevantIds)
+      .map((id) => groupLookup.get(id))
+      .filter(Boolean)
+      .sort((a, b) => (a.displayName || "").localeCompare(b.displayName || ""));
+
+    $("user-groups-count").textContent = relevant.length;
 
     const tbody = $("user-groups-tbody");
-    if (!managed.length) {
-      tbody.innerHTML = `<tr><td colspan="3" class="muted">Not a member of any managed EVAA/Fusion groups.</td></tr>`;
+    if (!relevant.length) {
+      tbody.innerHTML = `<tr><td colspan="4" class="muted">Not a member or owner of any managed EVAA/Fusion groups.</td></tr>`;
       return;
     }
-    tbody.innerHTML = managed.map((g) => `<tr>
-      <td>${escapeHtml(g.displayName)}</td>
-      <td>${g.mail ? `<a href="mailto:${escapeHtml(g.mail)}">${escapeHtml(g.mail)}</a>` : `<span class="muted">—</span>`}</td>
-      <td class="row-actions"><button class="btn-remove" data-group-id="${escapeHtml(g.id)}" data-group-name="${escapeHtml(g.displayName)}" aria-label="Remove from group">×</button></td>
-    </tr>`).join("");
+    tbody.innerHTML = relevant.map((g) => {
+      const isMember = memberIds.has(g.id);
+      const isOwner = ownerIds.has(g.id);
+      let roleCell;
+      if (isMember && isOwner) {
+        roleCell = `<span class="role-badge role-both">Member + Director</span>`;
+      } else if (isOwner) {
+        roleCell = `<span class="role-badge role-owner">Director only</span>`;
+      } else {
+        roleCell = `<span class="role-badge role-member">Member</span>`;
+      }
+      return `<tr>
+        <td>${escapeHtml(g.displayName)}</td>
+        <td>${roleCell}</td>
+        <td>${g.mail ? `<a href="mailto:${escapeHtml(g.mail)}">${escapeHtml(g.mail)}</a>` : `<span class="muted">—</span>`}</td>
+        <td class="row-actions"><button class="btn-remove" data-group-id="${escapeHtml(g.id)}" data-group-name="${escapeHtml(g.displayName)}" data-is-member="${isMember}" data-is-owner="${isOwner}" aria-label="Remove from group">×</button></td>
+      </tr>`;
+    }).join("");
 
     tbody.querySelectorAll(".btn-remove").forEach((btn) => {
       btn.addEventListener("click", () => removeUserFromGroup(btn.dataset.groupId, btn.dataset.groupName, btn));
@@ -606,13 +633,28 @@
 
   async function removeUserFromGroup(groupId, groupName, btn) {
     if (!currentDetailUser) return;
-    if (!confirm(`Remove ${currentDetailUser.displayName} from "${groupName}"?\n\nThis removes only this group association — the user's account, license, and other groups are untouched.`)) return;
+    const isMember = btn.dataset.isMember === "true";
+    const isOwner = btn.dataset.isOwner === "true";
+    let roleDesc;
+    if (isMember && isOwner) roleDesc = "as both member and director";
+    else if (isOwner) roleDesc = "as director (owner)";
+    else roleDesc = "as member";
+
+    if (!confirm(`Remove ${currentDetailUser.displayName} from "${groupName}" ${roleDesc}?\n\nThis removes only this group association — the user's account, license, and other groups are untouched.`)) return;
+
     btn.disabled = true; btn.textContent = "…";
+    const errors = [];
     try {
-      // Try member first, then owner (don't know which they are)
-      try { await GRAPH.removeMember(groupId, currentDetailUser.id); }
-      catch (_) { await GRAPH.removeOwner(groupId, currentDetailUser.id); }
-      logAction("removed user from group (members view)", currentDetailUser.displayName, currentDetailUser.id, { group: groupName });
+      if (isMember) {
+        try { await GRAPH.removeMember(groupId, currentDetailUser.id); }
+        catch (err) { errors.push(`member: ${err.message}`); }
+      }
+      if (isOwner) {
+        try { await GRAPH.removeOwner(groupId, currentDetailUser.id); }
+        catch (err) { errors.push(`owner: ${err.message}`); }
+      }
+      logAction("removed user from group (members view)", currentDetailUser.displayName, currentDetailUser.id, { group: groupName, asMember: isMember, asOwner: isOwner });
+      if (errors.length) showError(`Partial remove for ${currentDetailUser.displayName}: ${errors.join("; ")}`);
       await refreshUserDetail();
     } catch (err) {
       btn.disabled = false; btn.textContent = "×";
@@ -622,10 +664,13 @@
 
   async function refreshUserDetail() {
     if (!currentDetailUser) return;
-    const groups = await GRAPH.getUserMemberOf(currentDetailUser.id);
-    const fullUser = await fetchUserBasic(currentDetailUser.id);
+    const [groups, ownedGroups, fullUser] = await Promise.all([
+      GRAPH.getUserMemberOf(currentDetailUser.id),
+      GRAPH.getUserOwnedGroups(currentDetailUser.id).catch(() => []),
+      fetchUserBasic(currentDetailUser.id),
+    ]);
     currentDetailUser = fullUser;
-    renderUserDetail(fullUser, groups);
+    renderUserDetail(fullUser, groups, ownedGroups);
   }
 
   // Inline edit handler — used for displayName and jobTitle on the user detail view.

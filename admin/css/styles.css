@@ -618,6 +618,20 @@ td a:hover { text-decoration: underline; }
 }
 .muted-label { color: #777; font-weight: 600; margin-right: 4px; }
 
+/* Role badges on user-detail groups table */
+.role-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.75em;
+  font-weight: 600;
+  text-transform: none;
+  white-space: nowrap;
+}
+.role-member { background: #e0e6ee; color: #1B4F8C; }
+.role-owner { background: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+.role-both { background: #d4edda; color: #155724; }
+
 /* Mobile */
 @media (max-width: 700px) {
   main { padding: 12px; }
