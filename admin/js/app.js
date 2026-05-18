@@ -716,6 +716,7 @@
         fetchUserBasic(userId),
         GRAPH.getUserMemberOf(userId),
         GRAPH.getUserOwnedGroups(userId).catch(() => []),
+        ensureSkuCatalog(), // load license name map (cached after first call)
       ]);
       currentDetailUser = fullUser;
       renderUserDetail(fullUser, userGroups, ownedGroups);
@@ -726,11 +727,64 @@
 
   async function fetchUserBasic(userId) {
     const token = await AUTH.getToken();
-    const resp = await fetch(`https://graph.microsoft.com/v1.0/users/${userId}?$select=id,displayName,mail,userPrincipalName,jobTitle,accountEnabled`, {
+    const resp = await fetch(`https://graph.microsoft.com/v1.0/users/${userId}?$select=id,displayName,mail,userPrincipalName,jobTitle,accountEnabled,assignedLicenses`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!resp.ok) throw new Error(`Graph ${resp.status}`);
     return resp.json();
+  }
+
+  // SKU catalog cache: skuId -> { partNumber, friendly }
+  let skuCatalog = null;
+  async function ensureSkuCatalog() {
+    if (skuCatalog) return skuCatalog;
+    try {
+      const skus = await GRAPH.getSubscribedSkus();
+      skuCatalog = new Map();
+      for (const s of skus) {
+        skuCatalog.set(s.skuId, {
+          partNumber: s.skuPartNumber,
+          friendly: prettifySkuName(s.skuPartNumber, s.skuId),
+        });
+      }
+    } catch (err) {
+      console.warn("Could not fetch SKU catalog:", err);
+      skuCatalog = new Map();
+    }
+    return skuCatalog;
+  }
+
+  // Best-effort SKU name humanizer. M365 SKU part numbers are like SPB, ENTERPRISEPACK, etc.
+  // Common ones in our tenant are mapped explicitly; others get a generic prettify.
+  function prettifySkuName(partNumber, skuId) {
+    const KNOWN = {
+      "O365_BUSINESS_ESSENTIALS": "Microsoft 365 Business Basic",
+      "O365_BUSINESS_PREMIUM": "Microsoft 365 Business Standard",
+      "SPB": "Microsoft 365 Business Premium",
+      "ENTERPRISEPACK": "Office 365 E3",
+      "ENTERPRISEPREMIUM": "Office 365 E5",
+      "EXCHANGESTANDARD": "Exchange Online (Plan 1)",
+      "EXCHANGEENTERPRISE": "Exchange Online (Plan 2)",
+      "TEAMS_EXPLORATORY": "Teams Exploratory",
+      "FLOW_FREE": "Power Automate Free",
+      "POWERAUTOMATE_ATTENDED_RPA": "Power Automate Premium",
+      "POWER_BI_STANDARD": "Power BI (Free)",
+      "POWER_BI_PRO": "Power BI Pro",
+      "EMS": "Enterprise Mobility + Security E3",
+      "AAD_PREMIUM": "Entra ID P1",
+      "AAD_PREMIUM_P2": "Entra ID P2",
+      "WIN_DEF_ATP": "Defender for Endpoint",
+      "MCOMEETADV": "Audio Conferencing",
+      "DESKLESSPACK": "Office 365 F3",
+      "SHAREPOINTSTANDARD": "SharePoint (Plan 1)",
+      "SHAREPOINTENTERPRISE": "SharePoint (Plan 2)",
+    };
+    if (KNOWN[partNumber]) return KNOWN[partNumber];
+    // Fallback: convert SOMETHING_LIKE_THIS to "Something Like This"
+    return (partNumber || skuId || "Unknown SKU")
+      .split(/[_\s]+/)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(" ");
   }
 
   function renderUserDetail(user, userGroups, ownedGroups) {
@@ -758,9 +812,13 @@
       stateBadge.textContent = "Active";
       stateBadge.className = "account-state-badge state-active";
     }
-    // Toggle action buttons based on account state
-    $("offboard-user-btn").classList.toggle("hidden", isDisabled);
+    // Offboard always shown (admins can fully offboard a disabled user too, e.g. to remove
+    // license after a preserve-data period). Re-enable only when currently disabled.
+    $("offboard-user-btn").classList.remove("hidden");
     $("reenable-user-btn").classList.toggle("hidden", !isDisabled);
+
+    // Render assigned licenses (best-effort: needs the SKU catalog)
+    renderUserLicenses(user.assignedLicenses || []);
 
     // Build a union of managed groups the user is a member of OR an owner of.
     const managedIds = new Set(state.groups.map((g) => g.id));
@@ -811,6 +869,22 @@
     tbody.querySelectorAll(".link-button[data-jump-group-id]").forEach((b) => {
       b.addEventListener("click", () => jumpToGroup(b.dataset.jumpGroupId));
     });
+  }
+
+  function renderUserLicenses(assignedLicenses) {
+    const el = $("user-detail-licenses");
+    if (!assignedLicenses.length) {
+      el.innerHTML = `<span class="muted-label">Licenses:</span> <span class="license-badge license-none">none assigned</span>`;
+      return;
+    }
+    const items = assignedLicenses.map((lic) => {
+      const cat = skuCatalog ? skuCatalog.get(lic.skuId) : null;
+      const friendly = cat ? cat.friendly : `SKU ${lic.skuId.slice(0, 8)}…`;
+      const isEvaa = lic.skuId === GRAPH.EVAA_LICENSE_SKU_ID;
+      const cls = isEvaa ? "license-badge license-evaa" : "license-badge";
+      return `<span class="${cls}" title="${escapeHtml(lic.skuId)}">${escapeHtml(friendly)}</span>`;
+    }).join(" ");
+    el.innerHTML = `<span class="muted-label">Licenses:</span> ${items}`;
   }
 
   function jumpToGroup(groupId) {

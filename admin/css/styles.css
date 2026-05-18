@@ -746,6 +746,27 @@ td a:hover { text-decoration: underline; }
 .role-owner { background: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
 .role-both { background: #d4edda; color: #155724; }
 
+/* License badges on user detail */
+.license-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75em;
+  background: #e0e6ee;
+  color: #1B4F8C;
+  font-weight: 600;
+  margin-right: 4px;
+}
+.license-evaa {
+  background: #1B4F8C;
+  color: #fff;
+}
+.license-none {
+  background: #f8d7da;
+  color: #721c24;
+  font-style: italic;
+}
+
 /* Visual softening for disabled-account rows in the members list */
 .row-disabled td { color: #999; }
 .row-disabled .link-button { color: #888; font-style: italic; }

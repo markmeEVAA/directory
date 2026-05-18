@@ -188,6 +188,13 @@ const GRAPH = (() => {
     });
   }
 
+  // Tenant license catalog (SKU id -> friendly name + part number).
+  // Used to translate a user's assignedLicenses[].skuId into something human-readable.
+  async function getSubscribedSkus() {
+    const result = await callGraph("/subscribedSkus?$select=skuId,skuPartNumber,prepaidUnits,consumedUnits");
+    return result.value || [];
+  }
+
   // Create a new user via Graph. Returns the created user object including `id`.
   async function createUser({ displayName, givenName, surname, userPrincipalName, mailNickname, jobTitle, password }) {
     const body = {
@@ -258,6 +265,7 @@ const GRAPH = (() => {
     assignUserLicense,
     updateUser,
     sendMail,
+    getSubscribedSkus,
     EVAA_LICENSE_SKU_ID,
   };
 })();
