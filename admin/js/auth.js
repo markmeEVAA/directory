@@ -45,30 +45,30 @@ const AUTH = (() => {
     msalClient = new window.msal.PublicClientApplication(msalConfig);
     await msalClient.initialize();
 
-    // Handle redirect response if we just came back from sign-in
-    const response = await msalClient.handleRedirectPromise();
-    if (response && response.account) {
-      msalClient.setActiveAccount(response.account);
-      activeAccount = response.account;
-    } else {
-      // Try to pick up a cached account
-      const accounts = msalClient.getAllAccounts();
-      if (accounts.length > 0) {
-        msalClient.setActiveAccount(accounts[0]);
-        activeAccount = accounts[0];
-      }
+    // Pick up a cached account if one exists (popup mode never produces a
+    // redirect response, but a cached account survives reload within the
+    // sessionStorage TTL).
+    const accounts = msalClient.getAllAccounts();
+    if (accounts.length > 0) {
+      msalClient.setActiveAccount(accounts[0]);
+      activeAccount = accounts[0];
     }
     return activeAccount;
   }
 
   async function signIn() {
     if (!msalClient) throw new Error("Auth not initialized");
-    return msalClient.loginRedirect({ scopes: SCOPES });
+    const result = await msalClient.loginPopup({ scopes: SCOPES });
+    if (result && result.account) {
+      msalClient.setActiveAccount(result.account);
+      activeAccount = result.account;
+    }
+    return activeAccount;
   }
 
   async function signOut() {
     if (!msalClient) return;
-    return msalClient.logoutRedirect({
+    return msalClient.logoutPopup({
       postLogoutRedirectUri: msalConfig.auth.redirectUri,
     });
   }
@@ -81,8 +81,8 @@ const AUTH = (() => {
       const result = await msalClient.acquireTokenSilent(request);
       return result.accessToken;
     } catch (err) {
-      console.warn("Silent token acquisition failed, falling back to interactive:", err);
-      const result = await msalClient.acquireTokenRedirect(request);
+      console.warn("Silent token acquisition failed, falling back to popup:", err);
+      const result = await msalClient.acquireTokenPopup(request);
       return result?.accessToken;
     }
   }

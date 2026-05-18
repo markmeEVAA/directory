@@ -103,7 +103,14 @@
     // Init succeeded but no signed-in account → show signin view with the button enabled
     const signInBtn = $("sign-in-btn");
     signInBtn.disabled = false;
-    signInBtn.addEventListener("click", () => AUTH.signIn().catch((e) => showError(e.message)));
+    signInBtn.addEventListener("click", async () => {
+      try {
+        const acct = await AUTH.signIn();
+        if (acct) window.location.reload();
+      } catch (e) {
+        showError(e.message);
+      }
+    });
     show("signin");
     return;
   }
