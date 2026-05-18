@@ -9,6 +9,7 @@
     signin: $("signin-view"),
     noAccess: $("no-access-view"),
     loading: $("loading-view"),
+    help: $("help-view"),
     groups: $("groups-view"),
     groupDetail: $("group-detail-view"),
     members: $("members-view"),
@@ -37,11 +38,10 @@
   $("sign-out-btn").addEventListener("click", () => AUTH.signOut());
   $("signout-from-noaccess-btn").addEventListener("click", () => AUTH.signOut());
 
-  // Help modal — wired immediately (available even before sign-in)
-  $("help-btn").addEventListener("click", () => $("help-panel").classList.remove("hidden"));
-  $("help-close").addEventListener("click", () => $("help-panel").classList.add("hidden"));
-  $("help-panel").addEventListener("click", (e) => {
-    if (e.target.id === "help-panel") $("help-panel").classList.add("hidden"); // click backdrop to close
+  // Help button — switches to the Help view (no tab highlighted while on Help).
+  $("help-btn").addEventListener("click", () => {
+    show("help");
+    document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
   });
 
   // Boot: MSAL init + post-redirect handling.
@@ -177,7 +177,7 @@
 
   // Wire tab nav (now that admin is confirmed and groups are loaded)
   tabNav.classList.remove("hidden");
-  let activeTab = "groups";
+  let activeTab = null; // null = on Help view; "groups" or "members" otherwise
   document.querySelectorAll(".tab-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       activeTab = btn.dataset.tab;
@@ -187,9 +187,11 @@
     });
   });
 
-  // Initial render
-  show("groups");
+  // Land on Help view by default so admins see the orientation page first.
+  // Render the groups table in background so it's ready when they click the tab.
   renderGroupsTable();
+  show("help");
+  document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
 
   // Lazily hydrate owner counts (in parallel, with light throttling)
   // This avoids blocking the initial render on N flow calls.

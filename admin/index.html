@@ -14,7 +14,7 @@
         <h1>Admin Portal</h1>
       </div>
       <div class="header-actions">
-        <button id="help-btn" class="btn-link header-link" aria-label="Help">? Help</button>
+        <button id="help-btn" class="btn-link header-link" aria-label="Help">Need help?</button>
         <div id="user-area" class="hidden">
           <span id="user-name"></span>
           <button id="sign-out-btn" class="btn-link">Sign out</button>
@@ -51,6 +51,39 @@
     <section id="loading-view" class="view">
       <div class="card">
         <p class="loading" id="loading-text">Initializing…</p>
+      </div>
+    </section>
+
+    <!-- ============ HELP / LANDING VIEW ============ -->
+    <section id="help-view" class="view hidden">
+      <div class="card help-landing-card">
+        <h2>Welcome to the EVAA Admin Portal</h2>
+        <p class="lead">Use the tabs above (<strong>Manage Groups</strong> or <strong>Manage Members</strong>) to start editing. Click <strong>Need help?</strong> in the header any time to come back to this page.</p>
+
+        <h4>Manage Groups tab</h4>
+        <ul>
+          <li><strong>Group list:</strong> every EVAA / Fusion managed group. Click any row to drill in.</li>
+          <li><strong>Group detail:</strong> see Directors (owners) and Members in two tables. <em>+ Add Director</em> / <em>+ Add Member</em> opens a user search; click a result to add. Or click <em>+ Create new user</em> to onboard a brand-new user from scratch.</li>
+          <li><strong>× button</strong> on a row: opens a smart remove dialog. You can choose <em>Remove from this group only</em> (just unlinks), <em>Disable account only (preserve data)</em> (soft offboard, keeps the license so mailbox + OneDrive stay alive; notifies admins by email), or <em>Offboard fully</em> (removes from all managed groups + removes license + disables account — 30-day data clock starts).</li>
+        </ul>
+
+        <h4>Manage Members tab</h4>
+        <ul>
+          <li><strong>User list:</strong> all @evaasports.org and @avfusion.org users, sortable + filterable + paginated 25 per page. Disabled accounts shown in italic with a "disabled" badge.</li>
+          <li><strong>User detail:</strong> see what groups the user belongs to (with Member / Owner / Member + Owner badges), their job title, account state (Active / Disabled), and assigned licenses.</li>
+          <li><strong>Inline edit:</strong> the ✎ pencil next to the display name or job title lets you change it on the fly.</li>
+          <li><strong>+ Add to group</strong>: adds this user to any managed group as a member.</li>
+          <li><strong>Offboard</strong>: opens the same 3-option dialog (preserve data vs full offboard).</li>
+          <li><strong>Re-enable &amp; re-license</strong>: appears only for disabled accounts. Recovers a user within the 30-day data window.</li>
+        </ul>
+
+        <h4>Creating new users</h4>
+        <p>The <em>+ Create new user</em> button (in either tab) opens a form that creates the M365 account, assigns the EVAA license, adds them to a chosen group, and <strong>sends them a welcome email</strong> with their sign-in info — all in one shot. They'll be forced to change the temp password on first sign-in.</p>
+
+        <h4>Cross-navigation</h4>
+        <p>Click any group name on the User Detail page → jumps to that group's detail. Click any person name on the Group Detail page → jumps to that user's detail. The tab indicator updates automatically.</p>
+
+        <p class="muted footnote">Built with HTML/JS/MSAL/Graph. Source: <a href="https://github.com/markmeEVAA/directory/tree/main/admin" target="_blank">github.com/markmeEVAA/directory/admin</a></p>
       </div>
     </section>
 
@@ -174,43 +207,6 @@
 
     <!-- ============ MODALS ============ -->
 
-    <!-- Help / Instructions modal -->
-    <div id="help-panel" class="modal-overlay hidden">
-      <div class="modal-card help-card">
-        <div class="modal-header">
-          <h3>How this portal works</h3>
-          <button id="help-close" class="modal-close" aria-label="Close">×</button>
-        </div>
-        <div class="help-content">
-          <h4>What this is</h4>
-          <p>Self-service admin tool for managing M365 group memberships, board members, and user accounts. Restricted to members of the <strong>EVAA Portal Admins</strong> group. All actions write directly to Microsoft 365 via Graph — no approval routing for admin actions.</p>
-
-          <h4>Manage Groups tab</h4>
-          <ul>
-            <li><strong>Group list:</strong> every EVAA / Fusion managed group. Click any row to drill in.</li>
-            <li><strong>Group detail:</strong> see Directors (owners) and Members in two tables. <em>+ Add Director</em> / <em>+ Add Member</em> opens a user search; click a result to add. Or click <em>+ Create new user</em> to onboard a brand-new user from scratch.</li>
-            <li><strong>× button</strong> on a row: opens a smart remove dialog. You can choose <em>Remove from this group only</em> (just unlinks) or <em>Offboard fully</em> (removes from all managed groups + removes the EVAA license + disables the account).</li>
-          </ul>
-
-          <h4>Manage Members tab</h4>
-          <ul>
-            <li><strong>User list:</strong> all enabled @evaasports.org and @avfusion.org users, sortable + filterable + paginated 25 per page.</li>
-            <li><strong>User detail:</strong> see what groups the user belongs to (with Member / Owner / Member + Owner badges), their job title, account state.</li>
-            <li><strong>Inline edit:</strong> the ✎ pencil next to the display name or job title lets you change it on the fly.</li>
-            <li><strong>+ Add to group</strong>: adds this user to any managed group as a member.</li>
-            <li><strong>Offboard fully</strong>: same 3-step removal as the group view but starting from the user.</li>
-          </ul>
-
-          <h4>Creating new users</h4>
-          <p>The <em>+ Create new user</em> button (in either tab) opens a form that creates the M365 account, assigns the EVAA license, and adds them to a chosen group — all in one shot. A temp password is generated; copy it and email it to the user. They'll be forced to change it on first sign-in.</p>
-
-          <h4>Cross-navigation</h4>
-          <p>Click any group name on the User Detail page → jumps to that group's detail. Click any person name on the Group Detail page → jumps to that user's detail. The tab indicator updates automatically.</p>
-
-          <p class="muted footnote">Built with HTML/JS/MSAL/Graph. Source: <a href="https://github.com/markmeEVAA/directory/tree/main/admin" target="_blank">github.com/markmeEVAA/directory/admin</a></p>
-        </div>
-      </div>
-    </div>
 
 
     <!-- Add Director / Add Member (group → user picker) -->

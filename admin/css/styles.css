@@ -806,20 +806,30 @@ td a:hover { text-decoration: underline; }
   text-align: center;
 }
 
-/* Help modal — wider for readable content */
-.help-card { max-width: 720px; max-height: 80vh; overflow-y: auto; }
-.help-content h4 {
+/* Help landing card (full-page landing view, not a modal) */
+.help-landing-card {
+  max-width: 820px;
+  margin: 0 auto;
+}
+.help-landing-card .lead {
+  font-size: 1.05em;
+  background: #f5f8fc;
+  border-left: 4px solid #1B4F8C;
+  padding: 12px 16px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+}
+.help-landing-card h4 {
   color: #1B4F8C;
-  margin-top: 20px;
+  margin-top: 22px;
   margin-bottom: 6px;
   font-size: 1em;
 }
-.help-content h4:first-child { margin-top: 0; }
-.help-content ul { margin-top: 4px; padding-left: 24px; }
-.help-content li { margin-bottom: 6px; line-height: 1.5; }
-.help-content p { line-height: 1.5; }
-.help-content code,
-.help-content em { font-style: italic; color: #444; }
+.help-landing-card h4:first-of-type { margin-top: 12px; }
+.help-landing-card ul { margin-top: 4px; padding-left: 24px; }
+.help-landing-card li { margin-bottom: 6px; line-height: 1.5; }
+.help-landing-card p { line-height: 1.5; }
+.help-landing-card em { font-style: italic; color: #444; }
 
 /* "View as user" / canvas portal preview panel */
 .view-as-panel {
