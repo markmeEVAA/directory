@@ -579,6 +579,45 @@ td a:hover { text-decoration: underline; }
   font-family: ui-monospace, Menlo, Consolas, monospace;
 }
 
+/* Inline edit on user detail page */
+.btn-edit-inline {
+  background: transparent;
+  border: 1px solid transparent;
+  color: #888;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 0.9em;
+  vertical-align: middle;
+  transition: all 0.15s;
+}
+.btn-edit-inline:hover {
+  color: #1B4F8C;
+  background: #e9f0fa;
+  border-color: #1B4F8C;
+}
+.editable-text { font-weight: inherit; }
+.inline-edit-input {
+  padding: 4px 8px;
+  font-size: inherit;
+  font-family: inherit;
+  border: 1px solid #1B4F8C;
+  border-radius: 3px;
+  min-width: 240px;
+  vertical-align: middle;
+}
+.inline-edit-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(27,79,140,0.2);
+}
+.btn-inline-save, .btn-inline-cancel {
+  padding: 4px 10px;
+  font-size: 0.85em;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+.muted-label { color: #777; font-weight: 600; margin-right: 4px; }
+
 /* Mobile */
 @media (max-width: 700px) {
   main { padding: 12px; }

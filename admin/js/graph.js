@@ -148,6 +148,15 @@ const GRAPH = (() => {
     });
   }
 
+  // Generic user-field update. Used by the inline-edit UI on user detail view.
+  // patch is a partial user object, e.g. { jobTitle: "Baseball: VP" } or { displayName: "..." }
+  async function updateUser(userId, patch) {
+    return callGraph(`/users/${userId}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    });
+  }
+
   // Create a new user via Graph. Returns the created user object including `id`.
   async function createUser({ displayName, givenName, surname, userPrincipalName, mailNickname, jobTitle, password }) {
     const body = {
@@ -193,6 +202,7 @@ const GRAPH = (() => {
     enableUserAccount,
     createUser,
     assignUserLicense,
+    updateUser,
     EVAA_LICENSE_SKU_ID,
   };
 })();

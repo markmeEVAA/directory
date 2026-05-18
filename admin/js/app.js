@@ -559,9 +559,20 @@
   }
 
   function renderUserDetail(user, userGroups) {
-    $("user-detail-name").textContent = user.displayName || "(no name)";
+    // Display name with inline edit
+    const nameEl = $("user-detail-name");
+    nameEl.innerHTML = `<span class="editable-text" data-field="displayName">${escapeHtml(user.displayName || "(no name)")}</span> <button class="btn-edit-inline" data-field="displayName" data-current="${escapeHtml(user.displayName || "")}" aria-label="Edit display name">✎</button>`;
+
     $("user-detail-mail").innerHTML = user.mail ? `<a href="mailto:${escapeHtml(user.mail)}">${escapeHtml(user.mail)}</a> · UPN: ${escapeHtml(user.userPrincipalName || "")}` : escapeHtml(user.userPrincipalName || "");
-    $("user-detail-jobtitle").textContent = user.jobTitle ? `Role: ${user.jobTitle}` : "(no jobTitle set)";
+
+    // Job title with inline edit
+    const jtText = user.jobTitle || "(no jobTitle set)";
+    $("user-detail-jobtitle").innerHTML = `<span class="muted-label">Role:</span> <span class="editable-text" data-field="jobTitle">${escapeHtml(jtText)}</span> <button class="btn-edit-inline" data-field="jobTitle" data-current="${escapeHtml(user.jobTitle || "")}" aria-label="Edit job title">✎</button>`;
+
+    // Wire edit buttons (after innerHTML write)
+    $("user-detail-view").querySelectorAll(".btn-edit-inline").forEach((btn) => {
+      btn.addEventListener("click", () => startInlineEdit(btn));
+    });
 
     const stateBadge = $("user-account-state");
     if (user.accountEnabled === false) {
@@ -615,6 +626,62 @@
     const fullUser = await fetchUserBasic(currentDetailUser.id);
     currentDetailUser = fullUser;
     renderUserDetail(fullUser, groups);
+  }
+
+  // Inline edit handler — used for displayName and jobTitle on the user detail view.
+  // Replaces the editable-text + edit button with an input + Save / Cancel.
+  function startInlineEdit(editBtn) {
+    if (!currentDetailUser) return;
+    const field = editBtn.dataset.field;
+    const current = editBtn.dataset.current || "";
+    const container = editBtn.parentElement;
+    const editableSpan = container.querySelector(`.editable-text[data-field="${field}"]`);
+    if (!editableSpan) return;
+
+    const originalHtml = container.innerHTML;
+    const inputId = `inline-edit-${field}`;
+    container.innerHTML = `
+      <input type="text" id="${inputId}" class="inline-edit-input" value="${escapeHtml(current)}" />
+      <button class="btn-secondary btn-inline-save">Save</button>
+      <button class="btn-link btn-inline-cancel">Cancel</button>
+    `;
+    const input = document.getElementById(inputId);
+    input.focus();
+    input.select();
+
+    function cancel() { container.innerHTML = originalHtml; rewireUserDetailEdits(); }
+    container.querySelector(".btn-inline-cancel").addEventListener("click", cancel);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") cancel();
+      else if (e.key === "Enter") save();
+    });
+
+    async function save() {
+      const newValue = input.value.trim();
+      if (newValue === current) { cancel(); return; }
+      container.querySelector(".btn-inline-save").disabled = true;
+      container.querySelector(".btn-inline-cancel").disabled = true;
+      try {
+        await GRAPH.updateUser(currentDetailUser.id, { [field]: newValue });
+        logAction(`edited ${field}`, currentDetailUser.displayName, currentDetailUser.id, { field, from: current, to: newValue });
+        await refreshUserDetail();
+      } catch (err) {
+        container.innerHTML = originalHtml;
+        rewireUserDetailEdits();
+        showError(`Failed to update ${field}: ${err.message}`);
+      }
+    }
+    container.querySelector(".btn-inline-save").addEventListener("click", save);
+  }
+
+  // Re-wire after a cancel (rebinds the edit buttons since we replaced innerHTML).
+  function rewireUserDetailEdits() {
+    $("user-detail-view").querySelectorAll(".btn-edit-inline").forEach((btn) => {
+      // remove old listeners by cloning, then attach fresh
+      const fresh = btn.cloneNode(true);
+      btn.parentNode.replaceChild(fresh, btn);
+      fresh.addEventListener("click", () => startInlineEdit(fresh));
+    });
   }
 
   $("back-to-members-btn").addEventListener("click", () => {
