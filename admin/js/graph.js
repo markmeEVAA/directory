@@ -306,6 +306,8 @@ const GRAPH = (() => {
       memberEmail: payload.memberEmail || "",
       requesterEmail: me?.userPrincipalName || me?.mail || "",
       requesterName: me?.displayName || "",
+      removalDisposition: payload.removalDisposition || "",
+      transferTo: payload.transferTo || "",
     };
     const resp = await fetch(SUBMIT_MEMBER_REQUEST_URL, {
       method: "POST",

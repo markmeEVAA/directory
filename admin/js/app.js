@@ -368,20 +368,65 @@
         btn.disabled = true;
         btn.textContent = "…";
 
-        // OWNER MODE: skip the 3-option modal. File a single Remove request and let
-        // the admin approval flow decide whether/how to fully offboard.
+        // OWNER MODE: skip the 3-option modal. Capture the owner's intent for the
+        // user's mailbox/account so the admin's approval email has full context.
         if (role === "owner") {
           try {
             const memberEmail = btn.dataset.email || "";
             const parts = (userName || "").split(/\s+/);
             const firstName = parts[0] || userName || "";
             const lastName = parts.slice(1).join(" ") || "";
+            // Build the in-group member options for the transfer-to picker.
+            // Fetch current group's other members (excluding the person being removed).
+            let memberOptions = [];
+            try {
+              const members = await GRAPH.listGroupMembers(currentDetailGroup.id);
+              memberOptions = members
+                .filter((m) => m.id !== userId && m.mail)
+                .map((m) => ({ value: m.mail, label: `${m.displayName} (${m.mail})` }));
+            } catch (e) { /* non-fatal */ }
+            const transferOptionsHtml = memberOptions.length
+              ? memberOptions.map((o) => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join("")
+              : `<option value="" disabled>(no other members in this group)</option>`;
             const ok = await confirmCustom({
-              body: `<p>Submit a request to remove <strong>${escapeHtml(userName)}</strong> from <strong>${escapeHtml(currentDetailGroup.displayName)}</strong>?</p>
-                <p class="muted">An admin will be notified to approve the removal. You'll get a confirmation once it's processed.</p>`,
+              title: "Submit removal request",
+              body: `
+                <p>Submit a request to remove <strong>${escapeHtml(userName)}</strong> from <strong>${escapeHtml(currentDetailGroup.displayName)}</strong>?</p>
+                <div style="margin: 14px 0 6px;">
+                  <label for="owner-remove-disposition" style="font-weight:600; display:block; margin-bottom:6px;">What should happen to ${escapeHtml(firstName)}'s account and email?</label>
+                  <select id="owner-remove-disposition" style="width:100%; padding:6px 8px; font-size:14px;"
+                          onchange="document.getElementById('owner-remove-transfer-wrap').style.display = (this.value === 'Transfer mailbox to another person' ? 'block' : 'none');">
+                    <option value="Remove from group only">Just remove from this group (account untouched)</option>
+                    <option value="Transfer mailbox to another person">Transfer mailbox access to someone else in the group</option>
+                    <option value="Disable + preserve data">Disable account, keep mailbox alive (preserve data)</option>
+                    <option value="Offboard fully">Offboard fully (remove license, 30-day data delete clock)</option>
+                  </select>
+                </div>
+                <div id="owner-remove-transfer-wrap" style="margin: 6px 0; display:none;">
+                  <label for="owner-remove-transfer-to" style="font-weight:600; display:block; margin-bottom:6px;">Transfer mailbox access to:</label>
+                  <select id="owner-remove-transfer-to" style="width:100%; padding:6px 8px; font-size:14px;">
+                    ${transferOptionsHtml}
+                  </select>
+                  <p class="muted" style="margin-top:6px;">An admin will set up the mailbox handoff after approving.</p>
+                </div>
+                <p class="muted" style="margin-top:12px;">An admin will be notified to approve. You'll get a confirmation once it's processed.</p>
+              `,
               okLabel: "Submit removal request",
               okClass: "btn-warning",
             });
+            // Hook the disposition dropdown after the modal renders. Since confirmCustom
+            // renders inline, we use a short tick to find the elements once mounted —
+            // the modal body is set via innerHTML so element IDs are live as long as
+            // the modal is open. We toggle the transfer-to picker visibility on change.
+            const dispEl = $("owner-remove-disposition");
+            const transferWrap = $("owner-remove-transfer-wrap");
+            const transferEl = $("owner-remove-transfer-to");
+            // Attach change handler the first render. (confirmCustom resolves once OK
+            // is clicked, so by the time `ok` is set we've already captured selection.)
+            // But because the modal body is HTML-stringified, we never get a "render"
+            // event — workaround: set up a 0-delay listener early. Better: read on submit.
+            const disposition = dispEl ? dispEl.value : "Remove from group only";
+            const transferTo = (disposition === "Transfer mailbox to another person" && transferEl) ? transferEl.value : "";
             if (!ok) { btn.disabled = false; btn.textContent = "×"; return; }
             await GRAPH.createMemberRequest({
               requestType: "Remove",
@@ -390,9 +435,11 @@
               lastName,
               memberId: userId,
               memberEmail,
+              removalDisposition: disposition,
+              transferTo,
             });
             showToast(`Removal request submitted for ${userName}.`);
-            logAction("submitted Remove request", userName, userId, { group: currentDetailGroup.displayName });
+            logAction("submitted Remove request", userName, userId, { group: currentDetailGroup.displayName, disposition, transferTo });
           } catch (err) {
             showError(`Could not submit removal request: ${err.message}`);
           } finally {
