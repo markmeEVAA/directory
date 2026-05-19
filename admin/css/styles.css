@@ -912,7 +912,7 @@ td a:hover { text-decoration: underline; }
 /* Hidden by default — only the matching role-banner class shows */
 .role-banner { display: none; }
 
-body.role-owner .role-banner-owner {
+body.viewmode-owner .role-banner-owner {
   display: block;
   background: #FFF7E0;
   border-left: 4px solid #C68A2A;
@@ -924,15 +924,20 @@ body.role-owner .role-banner-owner {
 }
 
 /* Hide admin-only UI elements when signed in as a non-admin group owner */
-body.role-owner .tab-btn[data-tab="members"],
-body.role-owner #add-owner-btn,
-body.role-owner #create-user-from-members-btn,
-body.role-owner #create-user-from-add-btn,
-body.role-owner #remove-preserve-btn,
-body.role-owner #remove-offboard-btn,
-body.role-owner #add-user-to-group-btn,
-body.role-owner #reenable-user-btn,
-body.role-owner #offboard-user-btn,
-body.role-owner .cu-admin-only {
+body.viewmode-owner .tab-btn[data-tab="members"],
+body.viewmode-owner #add-owner-btn,
+body.viewmode-owner #create-user-from-members-btn,
+body.viewmode-owner #create-user-from-add-btn,
+body.viewmode-owner #remove-preserve-btn,
+body.viewmode-owner #remove-offboard-btn,
+body.viewmode-owner #add-user-to-group-btn,
+body.viewmode-owner #reenable-user-btn,
+body.viewmode-owner #offboard-user-btn,
+body.viewmode-owner .cu-admin-only {
   display: none !important;
 }
+
+/* Swap admin vs owner help text on the Help / landing view based on role. */
+.help-admin, .help-owner { display: none; }
+body.viewmode-admin .help-admin { display: block; }
+body.viewmode-owner .help-owner { display: block; }

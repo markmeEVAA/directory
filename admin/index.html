@@ -63,7 +63,8 @@
 
     <!-- ============ HELP / LANDING VIEW ============ -->
     <section id="help-view" class="view hidden">
-      <div class="card help-landing-card">
+      <!-- Admin help — shown when role=admin (revealed by body.viewmode-admin CSS) -->
+      <div class="card help-landing-card help-admin">
         <h2>Welcome to the EVAA Admin Portal</h2>
         <p class="lead">Use the tabs above (<strong>Manage Groups</strong> or <strong>Manage Members</strong>) to start editing. Click <strong>Need help?</strong> in the header any time to come back to this page.</p>
 
@@ -89,6 +90,27 @@
 
         <h4>Cross-navigation</h4>
         <p>Click any group name on the User Detail page → jumps to that group's detail. Click any person name on the Group Detail page → jumps to that user's detail. The tab indicator updates automatically.</p>
+      </div>
+
+      <!-- Owner help — shown when role=owner (revealed by body.viewmode-owner CSS) -->
+      <div class="card help-landing-card help-owner">
+        <h2>Welcome — Group Owner View</h2>
+        <p class="lead">You're signed in as an <strong>owner</strong> of one or more EVAA / Fusion groups. You can submit requests to add or remove members from your groups; an admin will review and approve them.</p>
+
+        <h4>Manage Groups tab</h4>
+        <ul>
+          <li><strong>Group list:</strong> shows only the groups <em>you</em> own. Click any row to drill in.</li>
+          <li><strong>Group detail:</strong> see Directors (owners) and Members of that group. Click <em>+ Add Member</em> to request adding a new person, or click the <em>×</em> on a member row to request removing them.</li>
+        </ul>
+
+        <h4>Requesting a new user (Add)</h4>
+        <p>From your group's detail page, click <strong>+ Add Member</strong>. Fill in the form — first name, last name, personal email, role — and click <strong>Create user</strong>. The new person isn't created right away; instead, a request is filed and an admin gets an email to approve it. Once they approve, the M365 account is provisioned automatically and the new user receives a welcome email with their sign-in info.</p>
+
+        <h4>Requesting a removal</h4>
+        <p>Click the <strong>×</strong> button on any member's row. Confirm the request. An admin gets an email to approve the removal; once approved, the member is removed from the group.</p>
+
+        <h4>What you won't see</h4>
+        <p>Admin-only features (Manage Members tab, the 3-option Remove dialog, Offboard, Re-enable, Create new user without a group context) are hidden from your view. If you need any of those, contact <a href="mailto:web-admin@evaasports.org">web-admin@evaasports.org</a>.</p>
       </div>
     </section>
 

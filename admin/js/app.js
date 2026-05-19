@@ -169,8 +169,11 @@
     groups = allManagedGroups.filter((g) => ownedSet.has(g.id));
   }
 
-  // Tag the body so CSS can hide admin-only elements when role=owner.
-  document.body.classList.add(`role-${role}`);
+  // Tag the body so CSS can hide admin-only elements when viewing as owner.
+  // Use "viewmode-*" not "role-*" to avoid collision with the pre-existing
+  // .role-owner badge class (which has yellow background — applying it to
+  // <body> would tint the whole page).
+  document.body.classList.add(`viewmode-${role}`);
 
   // State for groups view
   const state = {
