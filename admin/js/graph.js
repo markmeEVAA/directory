@@ -3,7 +3,14 @@
 
 const GRAPH = (() => {
   const BASE = "https://graph.microsoft.com/v1.0";
-  const PORTAL_ADMINS_GROUP_ID = "98d51c39-149a-4dbf-9e86-1510035d8239";
+  // Either of these groups grants full admin access in the portal:
+  //   EVAA Portal Admins  — the explicit admins group
+  //   EVAA - Leadership   — 7 executive officers (President, VP, Treasurer, Secretary,
+  //                         Marketing, Operations, Safety). They get admin too.
+  const ADMIN_GROUP_IDS = [
+    "98d51c39-149a-4dbf-9e86-1510035d8239", // EVAA Portal Admins
+    "12e5f9ce-d644-4052-aff8-b31e99c3acb9", // EVAA - Leadership
+  ];
 
   async function callGraph(path, options = {}) {
     const token = await AUTH.getToken();
@@ -40,15 +47,15 @@ const GRAPH = (() => {
     return callGraph("/me?$select=id,displayName,mail,userPrincipalName,jobTitle");
   }
 
-  // True if the current user is a member (or owner-as-member) of EVAA Portal Admins.
+  // True if the current user is a member of any admin-granting group
+  // (EVAA Portal Admins OR EVAA - Leadership).
   async function isPortalAdmin() {
     try {
-      // Most efficient check: /me/checkMemberGroups
       const result = await callGraph("/me/checkMemberGroups", {
         method: "POST",
-        body: JSON.stringify({ groupIds: [PORTAL_ADMINS_GROUP_ID] }),
+        body: JSON.stringify({ groupIds: ADMIN_GROUP_IDS }),
       });
-      return Array.isArray(result.value) && result.value.includes(PORTAL_ADMINS_GROUP_ID);
+      return Array.isArray(result.value) && result.value.some((id) => ADMIN_GROUP_IDS.includes(id));
     } catch (err) {
       console.error("Portal-admin check failed:", err);
       return false;
