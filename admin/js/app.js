@@ -14,6 +14,7 @@
     groupDetail: $("group-detail-view"),
     members: $("members-view"),
     userDetail: $("user-detail-view"),
+    reset: $("reset-view"),
   };
   const tabNav = $("tab-nav");
   const userArea = $("user-area");
@@ -254,12 +255,13 @@
 
   // Wire tab nav (now that admin is confirmed and groups are loaded)
   tabNav.classList.remove("hidden");
-  let activeTab = null; // null = on Help view; "groups" or "members" otherwise
+  let activeTab = null; // null = on Help view; "groups" / "members" / "reset" otherwise
   document.querySelectorAll(".tab-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       activeTab = btn.dataset.tab;
       document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b === btn));
       if (activeTab === "groups") show("groups");
+      else if (activeTab === "reset") show("reset");
       else { show("members"); ensureMembersLoaded(); }
     });
   });
@@ -1483,12 +1485,16 @@
 
         <h3 style="color:#1B4F8C;font-size:15px;margin:20px 0 8px;">How to sign in</h3>
         <ol style="margin:0 0 12px;padding-left:22px;font-size:14px;line-height:1.6;">
-          <li>Go to <a href="https://www.office.com" style="color:#1B4F8C;">office.com</a> and click <strong>Sign in</strong>.</li>
+          <li>Go to <a href="https://outlook.office.com" style="color:#1B4F8C;">outlook.office.com</a> and click <strong>Sign in</strong>.</li>
           <li>Enter the sign-in address above.</li>
           <li>Enter the temporary password.</li>
           <li>Follow the prompts to set a new password.</li>
-          <li>From there you'll have access to Outlook (your new EVAA email), Word, Excel, Teams, etc.</li>
         </ol>
+        <p style="margin:0 0 12px;font-size:14px;line-height:1.5;">From there you'll have access to Outlook (your new EVAA email), Word, Excel, Teams, etc.</p>
+        <p style="margin:0 0 12px;font-size:14px;line-height:1.5;">For additional instructions on how to use your email with EVAA, see: <a href="https://evaasports.org/evaaemail" style="color:#1B4F8C;">https://evaasports.org/evaaemail</a></p>
+        <div style="background:#FFF7E0;border-left:4px solid #C68A2A;padding:10px 14px;margin:14px 0;color:#5a4316;font-size:13.5px;">
+          <strong>Please note</strong> — the above credentials will remain active for less than 24 hours. Please update your password ASAP.
+        </div>
 
         <h3 style="color:#1B4F8C;font-size:15px;margin:20px 0 8px;">Help</h3>
         <p style="margin:0 0 12px;font-size:14px;line-height:1.5;">If you have trouble signing in or need anything changed, reply to this email or contact <a href="mailto:${adminMailSafe}" style="color:#1B4F8C;">${adminMailSafe}</a>.</p>
@@ -1748,5 +1754,239 @@
       if (activeTab === "groups" && currentDetailGroup) refreshDetail();
       else if (activeTab === "members" && currentDetailUser) refreshUserDetail();
     });
+  });
+
+  // =====================================================================
+  // RESET PASSWORD tab — admin path: direct Graph PATCH + send email
+  // Owner path: send admin notification email; no flow involvement
+  // =====================================================================
+
+  function buildPasswordResetEmailHtml({ first, upn, password, adminMail }) {
+    const upnSafe = escapeHtml(upn);
+    const pwdSafe = escapeHtml(password);
+    const firstSafe = escapeHtml(first);
+    const adminMailSafe = escapeHtml(adminMail);
+    return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f5f8fc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#222;">
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#f5f8fc;padding:24px 0;">
+  <tr><td align="center">
+    <table role="presentation" cellpadding="0" cellspacing="0" width="600" style="background:#ffffff;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.05);overflow:hidden;">
+      <tr><td style="background:#1B4F8C;color:#fff;padding:20px 28px;">
+        <h1 style="margin:0;font-size:20px;font-weight:700;">Your EVAA password was reset</h1>
+        <p style="margin:4px 0 0;font-size:14px;color:#cfd8e6;">Eastview Athletic Association</p>
+      </td></tr>
+      <tr><td style="padding:24px 28px;">
+        <p style="margin:0 0 12px;font-size:15px;line-height:1.5;">Hi ${firstSafe},</p>
+        <p style="margin:0 0 16px;font-size:15px;line-height:1.5;">Your EVAA password has been reset by an administrator. Here are your new sign-in credentials:</p>
+
+        <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;background:#f5f8fc;border:1px solid #d9e1ec;border-radius:6px;margin:12px 0;">
+          <tr><td style="padding:14px 16px;">
+            <div style="font-size:14px;margin-bottom:6px;"><strong>Sign-in address:</strong></div>
+            <div style="font-family:Menlo,Consolas,monospace;font-size:15px;color:#1B4F8C;margin-bottom:14px;">${upnSafe}</div>
+            <div style="font-size:14px;margin-bottom:6px;"><strong>Temporary password:</strong></div>
+            <div style="font-family:Menlo,Consolas,monospace;font-size:15px;color:#1B4F8C;">${pwdSafe}</div>
+          </td></tr>
+        </table>
+
+        <p style="margin:0 0 12px;font-size:14px;line-height:1.5;"><strong>Important:</strong> you'll be prompted to change this password the next time you sign in. Pick something memorable but secure.</p>
+
+        <h3 style="color:#1B4F8C;font-size:15px;margin:20px 0 8px;">How to sign in</h3>
+        <ol style="margin:0 0 12px;padding-left:22px;font-size:14px;line-height:1.6;">
+          <li>Go to <a href="https://outlook.office.com" style="color:#1B4F8C;">outlook.office.com</a> and click <strong>Sign in</strong>.</li>
+          <li>Enter the sign-in address above.</li>
+          <li>Enter the temporary password.</li>
+          <li>Follow the prompts to set a new password.</li>
+        </ol>
+        <p style="margin:0 0 12px;font-size:14px;line-height:1.5;">For additional instructions on how to use your email with EVAA, see: <a href="https://evaasports.org/evaaemail" style="color:#1B4F8C;">https://evaasports.org/evaaemail</a></p>
+        <div style="background:#FFF7E0;border-left:4px solid #C68A2A;padding:10px 14px;margin:14px 0;color:#5a4316;font-size:13.5px;">
+          <strong>Please note</strong> — the above credentials will remain active for less than 24 hours. Please update your password ASAP.
+        </div>
+
+        <h3 style="color:#1B4F8C;font-size:15px;margin:20px 0 8px;">Help</h3>
+        <p style="margin:0 0 12px;font-size:14px;line-height:1.5;">If you didn't request this reset, or if you have any trouble signing in, contact <a href="mailto:${adminMailSafe}" style="color:#1B4F8C;">${adminMailSafe}</a> immediately.</p>
+      </td></tr>
+      <tr><td style="background:#f5f8fc;color:#888;padding:14px 28px;font-size:12px;text-align:center;border-top:1px solid #d9e1ec;">
+        Eastview Athletic Association · <a href="https://www.evaasports.org" style="color:#1B4F8C;">evaasports.org</a>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>`;
+  }
+
+  // Reset Password tab state + handlers
+  let resetSelectedUser = null;
+  const resetSearchInput = $("reset-user-search");
+  const resetResults = $("reset-user-results");
+  const resetSelectedEl = $("reset-user-selected");
+  const resetSubmit = $("reset-submit");
+  const resetPersonal = $("reset-personal-email");
+
+  let resetSearchTimer = null;
+  resetSearchInput.addEventListener("input", (e) => {
+    const q = e.target.value.trim();
+    resetSelectedUser = null;
+    resetSelectedEl.style.display = "none";
+    resetSubmit.disabled = true;
+    clearTimeout(resetSearchTimer);
+    if (q.length < 2) { resetResults.innerHTML = ""; return; }
+    resetSearchTimer = setTimeout(async () => {
+      try {
+        let users;
+        if (role === "owner") {
+          // Owner-mode: search only users who are members of groups the owner has access to
+          // state.groups is already filtered to owned groups during boot
+          const all = [];
+          const seen = new Set();
+          for (const g of state.groups) {
+            try {
+              const ms = await GRAPH.listGroupMembers(g.id);
+              for (const m of ms) {
+                if (m.id && !seen.has(m.id)) {
+                  seen.add(m.id);
+                  if (
+                    (m.displayName || "").toLowerCase().includes(q.toLowerCase()) ||
+                    (m.mail || "").toLowerCase().includes(q.toLowerCase()) ||
+                    (m.userPrincipalName || "").toLowerCase().includes(q.toLowerCase())
+                  ) all.push(m);
+                }
+              }
+            } catch (_) {}
+          }
+          users = all.slice(0, 12);
+        } else {
+          users = await GRAPH.searchUsers(q);
+        }
+        renderResetResults(users);
+      } catch (err) {
+        showError("Search failed: " + err.message);
+      }
+    }, 250);
+  });
+
+  function renderResetResults(users) {
+    if (!users || !users.length) {
+      resetResults.innerHTML = `<p class="muted" style="padding:6px 0;">No matching users.</p>`;
+      return;
+    }
+    resetResults.innerHTML = users.map((u) => `<button type="button" class="user-result" data-uid="${escapeHtml(u.id)}" data-name="${escapeHtml(u.displayName)}" data-upn="${escapeHtml(u.userPrincipalName || u.mail || "")}">
+      <span class="user-name">${escapeHtml(u.displayName)}</span>
+      <span class="user-mail muted">${escapeHtml(u.mail || u.userPrincipalName || "")}</span>
+    </button>`).join("");
+    resetResults.querySelectorAll(".user-result").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        resetSelectedUser = { id: btn.dataset.uid, displayName: btn.dataset.name, userPrincipalName: btn.dataset.upn };
+        resetSelectedEl.innerHTML = `Selected: <strong>${escapeHtml(resetSelectedUser.displayName)}</strong> (<code>${escapeHtml(resetSelectedUser.userPrincipalName)}</code>)`;
+        resetSelectedEl.style.display = "block";
+        resetResults.innerHTML = "";
+        resetSearchInput.value = resetSelectedUser.displayName;
+        resetSubmit.disabled = !resetPersonal.value.trim();
+      });
+    });
+  }
+
+  resetPersonal.addEventListener("input", () => {
+    resetSubmit.disabled = !resetSelectedUser || !resetPersonal.value.trim();
+  });
+
+  $("reset-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!resetSelectedUser) return;
+    const personalEmail = resetPersonal.value.trim();
+    if (!personalEmail) return;
+
+    const form = $("reset-form");
+    const progress = $("reset-progress");
+    const result = $("reset-result");
+    form.classList.add("hidden");
+    progress.classList.remove("hidden");
+    progress.innerHTML = `<p class="loading">Working on it…</p>`;
+
+    try {
+      if (role === "owner") {
+        // Owner path: notify portaladmins; admin performs the reset
+        const adminMail = AUTH.getAccount()?.username || "(unknown)";
+        const adminName = AUTH.getAccount()?.name || adminMail;
+        const html = `<p>Group owner <strong>${escapeHtml(adminName)}</strong> (${escapeHtml(adminMail)}) has requested a password reset.</p>
+          <ul>
+            <li><strong>User:</strong> ${escapeHtml(resetSelectedUser.displayName)} (<code>${escapeHtml(resetSelectedUser.userPrincipalName)}</code>)</li>
+            <li><strong>Send new credentials to:</strong> <a href="mailto:${escapeHtml(personalEmail)}">${escapeHtml(personalEmail)}</a></li>
+          </ul>
+          <p>Open the EVAA Admin Portal &rarr; Reset Password tab to perform the reset.</p>`;
+        await GRAPH.sendMail(
+          ["portaladmins@evaasports.org"],
+          `[EVAA] Password reset requested for ${resetSelectedUser.displayName}`,
+          html,
+        );
+        logAction("submitted password reset request", resetSelectedUser.displayName, resetSelectedUser.id, { sendTo: personalEmail });
+        progress.classList.add("hidden");
+        result.classList.remove("hidden");
+        result.innerHTML = `<h4>✓ Request submitted</h4>
+          <p>An admin has been notified to reset <strong>${escapeHtml(resetSelectedUser.displayName)}</strong>'s password and send the new credentials to <strong>${escapeHtml(personalEmail)}</strong>.</p>
+          <div class="modal-actions"><button id="reset-done" class="btn-primary">Done</button></div>`;
+      } else {
+        // Admin path: generate password, PATCH passwordProfile, send email
+        const newPwd = generateTempPassword();
+        await GRAPH.updateUser(resetSelectedUser.id, {
+          passwordProfile: {
+            forceChangePasswordNextSignIn: true,
+            password: newPwd,
+          },
+        });
+        const firstName = (resetSelectedUser.displayName || "").split(/\s+/)[0] || resetSelectedUser.displayName;
+        const adminMail = AUTH.getAccount()?.username || "web-admin@evaasports.org";
+        let emailSent = false;
+        try {
+          const html = buildPasswordResetEmailHtml({
+            first: firstName,
+            upn: resetSelectedUser.userPrincipalName,
+            password: newPwd,
+            adminMail,
+          });
+          await GRAPH.sendMail(
+            [personalEmail],
+            `Your EVAA password has been reset`,
+            html,
+          );
+          emailSent = true;
+        } catch (mailErr) {
+          console.warn("Reset password email failed:", mailErr);
+        }
+        logAction("reset password", resetSelectedUser.displayName, resetSelectedUser.id, { sentTo: personalEmail, emailSent });
+        progress.classList.add("hidden");
+        result.classList.remove("hidden");
+        const emailNote = emailSent
+          ? `<p class="success-note">✓ New credentials emailed to <strong>${escapeHtml(personalEmail)}</strong>.</p>`
+          : `<p class="muted">Email send failed — please copy these credentials and forward manually:</p>`;
+        result.innerHTML = `<h4>✓ Password reset</h4>
+          ${emailNote}
+          <div class="cred-block">
+            <div><strong>Sign-in:</strong> <code>${escapeHtml(resetSelectedUser.userPrincipalName)}</code></div>
+            <div><strong>Temporary password:</strong> <code id="reset-pwd-copy">${escapeHtml(newPwd)}</code> <button id="reset-copy-pwd" class="btn-link">Copy</button></div>
+            <div class="muted">User must change password on next sign-in.</div>
+          </div>
+          <div class="modal-actions"><button id="reset-done" class="btn-primary">Done</button></div>`;
+        $("reset-copy-pwd").addEventListener("click", () => {
+          navigator.clipboard.writeText(newPwd).then(() => {
+            $("reset-copy-pwd").textContent = "Copied!";
+            setTimeout(() => { const el = document.getElementById("reset-copy-pwd"); if (el) el.textContent = "Copy"; }, 1500);
+          });
+        });
+      }
+      $("reset-done").addEventListener("click", () => {
+        // Reset the form back to initial state
+        resetSelectedUser = null;
+        resetSearchInput.value = "";
+        resetPersonal.value = "";
+        resetResults.innerHTML = "";
+        resetSelectedEl.style.display = "none";
+        resetSubmit.disabled = true;
+        result.classList.add("hidden");
+        form.classList.remove("hidden");
+      });
+    } catch (err) {
+      progress.classList.add("hidden");
+      form.classList.remove("hidden");
+      showError("Password reset failed: " + err.message);
+    }
   });
 })();

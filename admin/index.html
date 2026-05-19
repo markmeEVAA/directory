@@ -23,11 +23,12 @@
     </div>
   </header>
 
-  <!-- Top tab nav — shown only when admin is signed in -->
+  <!-- Top tab nav — shown only when signed in -->
   <nav id="tab-nav" class="tab-nav hidden">
     <div class="tab-nav-inner">
       <button class="tab-btn active" data-tab="groups">Manage Groups</button>
       <button class="tab-btn" data-tab="members">Manage Members</button>
+      <button class="tab-btn" data-tab="reset">Reset Password</button>
     </div>
   </nav>
 
@@ -231,6 +232,35 @@
         </table>
       </div>
 
+    </section>
+
+    <!-- ============ RESET PASSWORD TAB ============ -->
+    <section id="reset-view" class="view hidden">
+      <div class="card">
+        <h2>Reset Password</h2>
+        <p class="muted help-admin">As an admin you can reset any EVAA / Fusion user's password directly. A new temporary password is generated and emailed to the personal email you supply.</p>
+        <p class="muted help-owner">As a group owner you can request a password reset for users in groups you own. An admin will be notified to perform the reset and send the new credentials to the personal email you supply.</p>
+
+        <form id="reset-form" class="create-user-form" autocomplete="off" style="max-width:580px;">
+          <label>
+            <span>Which user?</span>
+            <input type="text" id="reset-user-search" placeholder="Type a name or email to search…" autocomplete="off" />
+            <div id="reset-user-results" class="search-results" style="margin-top:6px;"></div>
+            <div id="reset-user-selected" class="muted" style="margin-top:6px;display:none;"></div>
+          </label>
+          <label>
+            <span>Their personal (non-EVAA) email <span class="hint">where the new credentials will be sent</span></span>
+            <input type="email" id="reset-personal-email" required placeholder="e.g. someone@gmail.com" />
+          </label>
+          <div class="modal-actions">
+            <button type="reset" id="reset-cancel" class="btn-link">Clear</button>
+            <button type="submit" id="reset-submit" class="btn-primary" disabled>Send reset</button>
+          </div>
+        </form>
+
+        <div id="reset-progress" class="hidden" style="margin-top:14px;"></div>
+        <div id="reset-result" class="hidden" style="margin-top:14px;"></div>
+      </div>
     </section>
 
     <!-- ============ MODALS ============ -->
