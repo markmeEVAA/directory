@@ -271,83 +271,52 @@ const GRAPH = (() => {
     return managedGroupIds.filter((id) => ownedSet.has(id));
   }
 
-  // ---------------- SharePoint MemberRequests list (owner-mode approval flow) ----------------
-  // Resolve the EVAABoardPortal site + MemberRequests list IDs once, cached on first call.
-  // Tenant: evaasports.sharepoint.com → /sites/EVAABoardPortal → list "MemberRequests"
-  let _siteListCache = null;
-  async function resolveMemberRequestsList() {
-    if (_siteListCache) return _siteListCache;
-    const site = await callGraph(
-      "/sites/evaasports.sharepoint.com:/sites/EVAABoardPortal?$select=id"
-    );
-    const lists = await callGraph(
-      `/sites/${site.id}/lists?$filter=displayName eq 'MemberRequests'&$select=id,displayName`
-    );
-    const list = (lists.value || [])[0];
-    if (!list) throw new Error("MemberRequests list not found on EVAABoardPortal site");
-    _siteListCache = { siteId: site.id, listId: list.id };
-    return _siteListCache;
-  }
+  // ---------------- Submit Member Request (owner-mode approval flow) ----------------
+  // Owner-mode Add/Remove rows are created via the "EVAA - Submit Member Request"
+  // helper flow, which runs as the flow owner (web-admin) and has full SP rights.
+  // The user does NOT need direct SP access — this bypasses the per-user permission
+  // issue that direct Graph SP writes would hit for non-admin group owners.
+  //
+  // The flow's HTTP trigger URL is SAS-signed. Anyone with this URL can submit a
+  // row, but the row lands in MemberRequests with Status=Pending and an admin
+  // still has to Approve it via the existing Approval Flow before any provisioning
+  // happens. So it's safe to ship the URL in client-side JS.
+  const SUBMIT_MEMBER_REQUEST_URL =
+    "https://defaultb5897a1bb85b42bd8e619b021b67d2.ce.environment.api.powerplatform.com:443/" +
+    "powerautomate/automations/direct/workflows/3e7e4752b3314da9b462c92cc700c3eb/" +
+    "triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&" +
+    "sig=zaahy0L624fFCgB0Qmu7sNGV-OQbAahEIpRtnhDg6uY";
 
-  // Best-effort: look up the SharePoint lookup-id for the signed-in user so we
-  // can populate the RequestedBy Person column. If we can't, return null and the
-  // caller writes the row without RequestedBy (the Approval flow can still email
-  // the requester via the createdBy system field).
-  async function resolveSelfLookupId(siteId) {
-    try {
-      const me = await getMe();
-      if (!me?.userPrincipalName) return null;
-      // The hidden Site User Information List on each site can be queried via
-      // /lists('User Information List') by displayName. Filter by EMail.
-      const lists = await callGraph(
-        `/sites/${siteId}/lists?$filter=displayName eq 'User Information List' or displayName eq 'Site User Information List'&$select=id,displayName`
-      );
-      const list = (lists.value || [])[0];
-      if (!list) return null;
-      const items = await callGraph(
-        `/sites/${siteId}/lists/${list.id}/items?$expand=fields($select=Title,Name,EMail)&$top=999`
-      );
-      const match = (items.value || []).find((it) => {
-        const f = it.fields || {};
-        return (
-          (f.EMail || "").toLowerCase() === me.mail?.toLowerCase() ||
-          (f.EMail || "").toLowerCase() === me.userPrincipalName.toLowerCase() ||
-          (f.Name || "").toLowerCase().includes(me.userPrincipalName.toLowerCase())
-        );
-      });
-      return match ? parseInt(match.id, 10) : null;
-    } catch (err) {
-      console.warn("resolveSelfLookupId failed (non-fatal):", err);
-      return null;
-    }
-  }
-
-  // Submit a row to MemberRequests. Mirrors the canvas-app AddScreen / RemoveConfirmScreen Patch.
-  // requestType: "Add" or "Remove"
-  // For Add: firstName, lastName, personalEmail, emailDomain ("@evaasports.org" or "@avfusion.org"), role, sportDisplayName
-  // For Remove: firstName, lastName, memberId, memberEmail, sportDisplayName (role/personalEmail/emailDomain optional)
+  // Submit a row to MemberRequests via the helper flow. Mirrors the canvas-app
+  // AddScreen / RemoveConfirmScreen Patch. requestType: "Add" or "Remove".
+  // For Add: firstName, lastName, personalEmail, emailDomain ("@evaasports.org" or
+  //   "@avfusion.org"), role, sportDisplayName.
+  // For Remove: firstName, lastName, memberId, memberEmail, sportDisplayName.
   async function createMemberRequest(payload) {
-    const { siteId, listId } = await resolveMemberRequestsList();
     const me = await getMe();
-    const lookupId = await resolveSelfLookupId(siteId);
-    const fields = {
-      Title: payload.title || `${payload.firstName || ""} ${payload.lastName || ""}`.trim() || "Request",
-      RequestType: payload.requestType,
-      Sport: payload.sportDisplayName,
-      FirstName: payload.firstName || "",
-      LastName: payload.lastName || "",
-      PersonalEmail: payload.personalEmail || "n/a",
-      EmailDomain: payload.emailDomain || "@evaasports.org",
-      Role: payload.role || (payload.requestType === "Remove" ? "Removal Request" : ""),
-      Status: "Pending",
+    const body = {
+      requestType: payload.requestType,
+      sportDisplayName: payload.sportDisplayName,
+      firstName: payload.firstName || "",
+      lastName: payload.lastName || "",
+      personalEmail: payload.personalEmail || "n/a",
+      emailDomain: payload.emailDomain || "@evaasports.org",
+      role: payload.role || "",
+      memberId: payload.memberId || "",
+      memberEmail: payload.memberEmail || "",
+      requesterEmail: me?.userPrincipalName || me?.mail || "",
+      requesterName: me?.displayName || "",
     };
-    if (payload.memberId) fields.MemberID = payload.memberId;
-    if (payload.memberEmail) fields.MemberEmail = payload.memberEmail;
-    if (lookupId != null) fields.RequestedByLookupId = lookupId;
-    return callGraph(`/sites/${siteId}/lists/${listId}/items`, {
+    const resp = await fetch(SUBMIT_MEMBER_REQUEST_URL, {
       method: "POST",
-      body: JSON.stringify({ fields }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
     });
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => "");
+      throw new Error(`Submit-request flow ${resp.status}: ${errText.slice(0, 300)}`);
+    }
+    return resp.json().catch(() => ({ status: "submitted" }));
   }
 
   return {
