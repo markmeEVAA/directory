@@ -131,21 +131,46 @@
     return;
   }
 
-  if (!isAdmin) {
-    show("noAccess");
-    return;
-  }
-
-  // Load all managed groups
+  // Load all managed groups first (we need them either way — admin gets all,
+  // owner gets the subset they own).
   $("loading-text").textContent = "Loading groups…";
-  let groups;
+  let allManagedGroups;
   try {
-    groups = await GRAPH.listManagedGroups();
+    allManagedGroups = await GRAPH.listManagedGroups();
   } catch (err) {
     showError("Failed to load groups: " + err.message);
     show("signin");
     return;
   }
+
+  // Tri-state role: admin / owner / none.
+  // Admins see everything. Owners see only the groups they own (with approval-routed Add/Remove).
+  let role = "none";
+  let groups;
+  if (isAdmin) {
+    role = "admin";
+    groups = allManagedGroups;
+  } else {
+    $("loading-text").textContent = "Checking group ownership…";
+    let ownedIds = [];
+    try {
+      ownedIds = await GRAPH.getOwnedManagedGroupIds(allManagedGroups.map((g) => g.id));
+    } catch (err) {
+      showError("Owner check failed: " + err.message);
+      show("noAccess");
+      return;
+    }
+    if (ownedIds.length === 0) {
+      show("noAccess");
+      return;
+    }
+    role = "owner";
+    const ownedSet = new Set(ownedIds);
+    groups = allManagedGroups.filter((g) => ownedSet.has(g.id));
+  }
+
+  // Tag the body so CSS can hide admin-only elements when role=owner.
+  document.body.classList.add(`role-${role}`);
 
   // State for groups view
   const state = {
@@ -299,7 +324,7 @@
     }
   }
 
-  function renderPeopleRows(people, emptyMsg, role) {
+  function renderPeopleRows(people, emptyMsg, rowRole) {
     if (!people || people.length === 0) {
       return `<tr><td colspan="4" class="muted">${escapeHtml(emptyMsg)}</td></tr>`;
     }
@@ -307,7 +332,7 @@
       <td><button class="link-button" data-jump-user-id="${escapeHtml(p.id)}" data-user-name="${escapeHtml(p.displayName)}">${escapeHtml(p.displayName)}</button></td>
       <td>${escapeHtml(p.jobTitle || "")}</td>
       <td>${p.mail ? `<a href="mailto:${escapeHtml(p.mail)}" onclick="event.stopPropagation()">${escapeHtml(p.mail)}</a>` : `<span class="muted">—</span>`}</td>
-      <td class="row-actions"><button class="btn-remove" data-user-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.displayName)}" data-role="${role}" aria-label="Remove">×</button></td>
+      <td class="row-actions"><button class="btn-remove" data-user-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.displayName)}" data-email="${escapeHtml(p.mail || "")}" data-role="${rowRole}" aria-label="Remove">×</button></td>
     </tr>`).join("");
   }
 
@@ -334,11 +359,45 @@
         if (!btn) return;
         const userId = btn.dataset.userId;
         const userName = btn.dataset.name;
-        const role = btn.dataset.role; // "owner" or "member"
+        const rowRole = btn.dataset.role; // "owner" or "member" (relative to this group)
         if (!currentDetailGroup || !userId) return;
 
         btn.disabled = true;
         btn.textContent = "…";
+
+        // OWNER MODE: skip the 3-option modal. File a single Remove request and let
+        // the admin approval flow decide whether/how to fully offboard.
+        if (role === "owner") {
+          try {
+            const memberEmail = btn.dataset.email || "";
+            const parts = (userName || "").split(/\s+/);
+            const firstName = parts[0] || userName || "";
+            const lastName = parts.slice(1).join(" ") || "";
+            const ok = await confirmCustom({
+              body: `<p>Submit a request to remove <strong>${escapeHtml(userName)}</strong> from <strong>${escapeHtml(currentDetailGroup.displayName)}</strong>?</p>
+                <p class="muted">An admin will be notified to approve the removal. You'll get a confirmation once it's processed.</p>`,
+              okLabel: "Submit removal request",
+              okClass: "btn-warning",
+            });
+            if (!ok) { btn.disabled = false; btn.textContent = "×"; return; }
+            await GRAPH.createMemberRequest({
+              requestType: "Remove",
+              sportDisplayName: currentDetailGroup.displayName,
+              firstName,
+              lastName,
+              memberId: userId,
+              memberEmail,
+            });
+            showToast(`Removal request submitted for ${userName}.`);
+            logAction("submitted Remove request", userName, userId, { group: currentDetailGroup.displayName });
+          } catch (err) {
+            showError(`Could not submit removal request: ${err.message}`);
+          } finally {
+            btn.disabled = false;
+            btn.textContent = "×";
+          }
+          return;
+        }
 
         // Query what other managed groups this user is in (excluding this one).
         let otherManagedGroups = [];
@@ -353,7 +412,7 @@
           console.warn("Could not fetch user's other groups:", err);
         }
 
-        pendingRemove = { userId, userName, role, btn, otherManagedGroups };
+        pendingRemove = { userId, userName, role: rowRole, btn, otherManagedGroups };
         openRemovePanel();
       });
     });
@@ -606,7 +665,19 @@
   }
 
   $("add-owner-btn").addEventListener("click", () => openAddPanel("owner"));
-  $("add-member-btn").addEventListener("click", () => openAddPanel("member"));
+  // Owner mode: + Add Member skips the user-search panel and opens the Create User
+  // form directly (pre-filled with current group, group selector locked). On submit
+  // we file a MemberRequests row instead of provisioning directly — admin approves.
+  $("add-member-btn").addEventListener("click", () => {
+    if (role === "owner") {
+      openCreateUserPanel(currentDetailGroup ? currentDetailGroup.id : null);
+      // Lock the group selector — owners can only request additions to the current group.
+      const sel = $("cu-group");
+      if (sel) sel.disabled = true;
+    } else {
+      openAddPanel("member");
+    }
+  });
   $("add-panel-close").addEventListener("click", closeAddPanel);
 
   let searchDebounce;
@@ -1488,6 +1559,31 @@
     const groupId = $("cu-group").value;
     const asOwner = $("cu-as-owner").checked;
     const groupName = state.groups.find((g) => g.id === groupId)?.displayName || "";
+
+    // OWNER MODE: file a MemberRequests row for admin approval; do not provision directly.
+    if (role === "owner") {
+      const roleSelect = $("cu-role").value;
+      const roleOther = $("cu-role-other").value.trim();
+      const roleVal = roleSelect === "Other" ? roleOther : roleSelect;
+      try {
+        await GRAPH.createMemberRequest({
+          requestType: "Add",
+          sportDisplayName: groupName,
+          firstName: first,
+          lastName: last,
+          personalEmail,
+          emailDomain: "@" + domain,
+          role: roleVal,
+        });
+        closeCreateUserPanel();
+        showToast(`Add request submitted — an admin will approve and provision the account.`);
+        logAction("submitted Add request", `${first} ${last}`, null, { group: groupName, role: roleVal });
+      } catch (err) {
+        showError(`Could not submit Add request: ${err.message}`);
+      }
+      return;
+    }
+
     const password = generateTempPassword();
 
     const form = $("create-user-form");

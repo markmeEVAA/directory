@@ -246,9 +246,101 @@ const GRAPH = (() => {
     });
   }
 
+  // Return the subset of managed group IDs that the current user OWNS.
+  // Uses /me/ownedObjects, filters to the managed-group IDs we already loaded.
+  // Empty array means "not an owner of anything managed".
+  async function getOwnedManagedGroupIds(managedGroupIds) {
+    if (!managedGroupIds || managedGroupIds.length === 0) return [];
+    const owned = await callGraphAll(
+      `/me/ownedObjects/microsoft.graph.group?$select=id&$top=200`
+    );
+    const ownedSet = new Set(owned.map((g) => g.id));
+    return managedGroupIds.filter((id) => ownedSet.has(id));
+  }
+
+  // ---------------- SharePoint MemberRequests list (owner-mode approval flow) ----------------
+  // Resolve the EVAABoardPortal site + MemberRequests list IDs once, cached on first call.
+  // Tenant: evaasports.sharepoint.com → /sites/EVAABoardPortal → list "MemberRequests"
+  let _siteListCache = null;
+  async function resolveMemberRequestsList() {
+    if (_siteListCache) return _siteListCache;
+    const site = await callGraph(
+      "/sites/evaasports.sharepoint.com:/sites/EVAABoardPortal?$select=id"
+    );
+    const lists = await callGraph(
+      `/sites/${site.id}/lists?$filter=displayName eq 'MemberRequests'&$select=id,displayName`
+    );
+    const list = (lists.value || [])[0];
+    if (!list) throw new Error("MemberRequests list not found on EVAABoardPortal site");
+    _siteListCache = { siteId: site.id, listId: list.id };
+    return _siteListCache;
+  }
+
+  // Best-effort: look up the SharePoint lookup-id for the signed-in user so we
+  // can populate the RequestedBy Person column. If we can't, return null and the
+  // caller writes the row without RequestedBy (the Approval flow can still email
+  // the requester via the createdBy system field).
+  async function resolveSelfLookupId(siteId) {
+    try {
+      const me = await getMe();
+      if (!me?.userPrincipalName) return null;
+      // The hidden Site User Information List on each site can be queried via
+      // /lists('User Information List') by displayName. Filter by EMail.
+      const lists = await callGraph(
+        `/sites/${siteId}/lists?$filter=displayName eq 'User Information List' or displayName eq 'Site User Information List'&$select=id,displayName`
+      );
+      const list = (lists.value || [])[0];
+      if (!list) return null;
+      const items = await callGraph(
+        `/sites/${siteId}/lists/${list.id}/items?$expand=fields($select=Title,Name,EMail)&$top=999`
+      );
+      const match = (items.value || []).find((it) => {
+        const f = it.fields || {};
+        return (
+          (f.EMail || "").toLowerCase() === me.mail?.toLowerCase() ||
+          (f.EMail || "").toLowerCase() === me.userPrincipalName.toLowerCase() ||
+          (f.Name || "").toLowerCase().includes(me.userPrincipalName.toLowerCase())
+        );
+      });
+      return match ? parseInt(match.id, 10) : null;
+    } catch (err) {
+      console.warn("resolveSelfLookupId failed (non-fatal):", err);
+      return null;
+    }
+  }
+
+  // Submit a row to MemberRequests. Mirrors the canvas-app AddScreen / RemoveConfirmScreen Patch.
+  // requestType: "Add" or "Remove"
+  // For Add: firstName, lastName, personalEmail, emailDomain ("@evaasports.org" or "@avfusion.org"), role, sportDisplayName
+  // For Remove: firstName, lastName, memberId, memberEmail, sportDisplayName (role/personalEmail/emailDomain optional)
+  async function createMemberRequest(payload) {
+    const { siteId, listId } = await resolveMemberRequestsList();
+    const me = await getMe();
+    const lookupId = await resolveSelfLookupId(siteId);
+    const fields = {
+      Title: payload.title || `${payload.firstName || ""} ${payload.lastName || ""}`.trim() || "Request",
+      RequestType: payload.requestType,
+      Sport: payload.sportDisplayName,
+      FirstName: payload.firstName || "",
+      LastName: payload.lastName || "",
+      PersonalEmail: payload.personalEmail || "n/a",
+      EmailDomain: payload.emailDomain || "@evaasports.org",
+      Role: payload.role || (payload.requestType === "Remove" ? "Removal Request" : ""),
+      Status: "Pending",
+    };
+    if (payload.memberId) fields.MemberID = payload.memberId;
+    if (payload.memberEmail) fields.MemberEmail = payload.memberEmail;
+    if (lookupId != null) fields.RequestedByLookupId = lookupId;
+    return callGraph(`/sites/${siteId}/lists/${listId}/items`, {
+      method: "POST",
+      body: JSON.stringify({ fields }),
+    });
+  }
+
   return {
     getMe,
     isPortalAdmin,
+    getOwnedManagedGroupIds,
     listManagedGroups,
     listGroupMembers,
     listGroupOwners,
@@ -266,6 +358,7 @@ const GRAPH = (() => {
     updateUser,
     sendMail,
     getSubscribedSkus,
+    createMemberRequest,
     EVAA_LICENSE_SKU_ID,
   };
 })();

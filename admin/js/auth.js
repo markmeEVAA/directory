@@ -13,6 +13,7 @@ const AUTH = (() => {
   //   Group.ReadWrite.All      — add/remove members + owners
   //   User.ReadWrite.All       — create / update / disable / enable users; assign licenses
   //   Mail.Send                — send welcome + admin-notify emails as the signed-in user
+  //   Sites.ReadWrite.All      — write rows to MemberRequests SharePoint list (owner-mode Add/Remove)
   const SCOPES = [
     "User.Read",
     "Group.Read.All",
@@ -20,6 +21,7 @@ const AUTH = (() => {
     "Group.ReadWrite.All",
     "User.ReadWrite.All",
     "Mail.Send",
+    "Sites.ReadWrite.All",
   ];
 
   const msalConfig = {

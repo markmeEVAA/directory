@@ -32,6 +32,13 @@
   </nav>
 
   <main>
+    <!-- Banner shown only when signed in as a non-admin group owner.
+         CSS hides this by default; body.role-owner reveals it. -->
+    <div class="role-banner role-banner-owner">
+      <strong>Group owner view.</strong>
+      You can submit Add or Remove requests for the groups you own; an admin will approve them. You can only see and act on groups where you are listed as an owner.
+    </div>
+
     <section id="signin-view" class="view hidden">
       <div class="card">
         <h2>Admin sign-in</h2>
@@ -332,7 +339,7 @@
             <span>Final job title <span class="hint">(auto-built from group + role, read-only)</span></span>
             <input type="text" id="cu-jobtitle" placeholder="(auto)" readonly tabindex="-1" />
           </label>
-          <label class="checkbox-label">
+          <label class="checkbox-label cu-admin-only">
             <input type="checkbox" id="cu-as-owner" />
             Also make them an owner/director of this group
           </label>

@@ -907,3 +907,32 @@ td a:hover { text-decoration: underline; }
   th, td { padding: 6px 8px; }
   .toolbar { flex-direction: column; align-items: stretch; }
 }
+
+/* ============ Role-based UI scoping ============ */
+/* Hidden by default — only the matching role-banner class shows */
+.role-banner { display: none; }
+
+body.role-owner .role-banner-owner {
+  display: block;
+  background: #FFF7E0;
+  border-left: 4px solid #C68A2A;
+  padding: 10px 16px;
+  margin: 0 0 12px;
+  font-size: 0.9em;
+  color: #5a4316;
+  border-radius: 0 4px 4px 0;
+}
+
+/* Hide admin-only UI elements when signed in as a non-admin group owner */
+body.role-owner .tab-btn[data-tab="members"],
+body.role-owner #add-owner-btn,
+body.role-owner #create-user-from-members-btn,
+body.role-owner #create-user-from-add-btn,
+body.role-owner #remove-preserve-btn,
+body.role-owner #remove-offboard-btn,
+body.role-owner #add-user-to-group-btn,
+body.role-owner #reenable-user-btn,
+body.role-owner #offboard-user-btn,
+body.role-owner .cu-admin-only {
+  display: none !important;
+}
