@@ -1126,7 +1126,13 @@
     else if (isOwner) roleDesc = "as director (owner)";
     else roleDesc = "as member";
 
-    if (!confirm(`Remove ${currentDetailUser.displayName} from "${groupName}" ${roleDesc}?\n\nThis removes only this group association — the user's account, license, and other groups are untouched.`)) return;
+    const ok = await confirmCustom({
+      body: `<p>Remove <strong>${escapeHtml(currentDetailUser.displayName)}</strong> from <strong>${escapeHtml(groupName)}</strong> ${escapeHtml(roleDesc)}?</p>
+        <p class="muted">This removes only this group association &mdash; the user's account, license, and other groups are untouched.</p>`,
+      okLabel: "Remove from group",
+      okClass: "btn-warning",
+    });
+    if (!ok) return;
 
     btn.disabled = true; btn.textContent = "…";
     const errors = [];
@@ -1251,7 +1257,12 @@
 
   async function addUserToPickedGroup(groupId, groupName) {
     if (!currentDetailUser) return;
-    if (!confirm(`Add ${currentDetailUser.displayName} to "${groupName}" as a member?`)) return;
+    const ok = await confirmCustom({
+      body: `<p>Add <strong>${escapeHtml(currentDetailUser.displayName)}</strong> to <strong>${escapeHtml(groupName)}</strong> as a member?</p>`,
+      okLabel: "Add as member",
+      okClass: "btn-primary",
+    });
+    if (!ok) return;
     try {
       await GRAPH.addMember(groupId, currentDetailUser.id);
       logAction("added user to group (members view)", currentDetailUser.displayName, currentDetailUser.id, { group: groupName });
@@ -1267,8 +1278,18 @@
   $("reenable-user-btn").addEventListener("click", async () => {
     if (!currentDetailUser) return;
     const u = currentDetailUser;
-    const msg = `Re-enable ${u.displayName} and reassign the EVAA license?\n\nThis will:\n  • Set accountEnabled = true (user can sign in again)\n  • Reassign the EVAA M365 license (mailbox / OneDrive reactivated)\n\nGroups are NOT re-added automatically — use + Add to group afterward for any groups they should rejoin.\n\nIf they don't remember their password, they'll need to reset it via the standard 'Forgot password' link on the M365 sign-in page (or you can set a new one later when Password Reset is built).`;
-    if (!confirm(msg)) return;
+    const ok = await confirmCustom({
+      body: `<p>Re-enable <strong>${escapeHtml(u.displayName)}</strong> and reassign the EVAA license?</p>
+        <p>This will:</p>
+        <ul>
+          <li>Set <code>accountEnabled = true</code> (user can sign in again)</li>
+          <li>Reassign the EVAA M365 license (mailbox / OneDrive reactivated)</li>
+        </ul>
+        <p class="muted">Groups are NOT re-added automatically &mdash; use <strong>+ Add to group</strong> afterward for any groups they should rejoin. If they don't remember their password they'll need to reset via the M365 &ldquo;Forgot password&rdquo; link (or wait for Password Reset to ship).</p>`,
+      okLabel: "Re-enable & re-license",
+      okClass: "btn-primary",
+    });
+    if (!ok) return;
 
     const btn = $("reenable-user-btn");
     btn.disabled = true;
