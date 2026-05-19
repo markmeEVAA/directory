@@ -27,8 +27,14 @@ const GRAPH = (() => {
       const body = await resp.text().catch(() => "");
       throw new Error(`Graph ${resp.status} ${resp.statusText}: ${body.slice(0, 300)}`);
     }
-    if (resp.status === 204) return null;
-    return resp.json();
+    // 204 No Content and 202 Accepted (e.g., /me/sendMail) return empty bodies.
+    // Some other 2xx responses may also be empty. Read as text first; only parse
+    // JSON if there's something there.
+    if (resp.status === 204 || resp.status === 202) return null;
+    const text = await resp.text();
+    if (!text) return null;
+    try { return JSON.parse(text); }
+    catch { return null; }
   }
 
   // Paginated GET — follows @odata.nextLink until exhausted.
