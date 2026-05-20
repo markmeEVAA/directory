@@ -244,8 +244,10 @@
         <form id="reset-form" class="create-user-form" autocomplete="off" style="max-width:580px;">
           <label>
             <span>Which user?</span>
-            <input type="text" id="reset-user-search" placeholder="Type a name or email to search…" autocomplete="off" />
-            <div id="reset-user-results" class="search-results" style="margin-top:6px;"></div>
+            <input type="text" id="reset-user-filter" placeholder="Filter the list below…" autocomplete="off" />
+            <select id="reset-user-picker" size="8" style="width:100%; margin-top:6px; padding:6px; font-family:inherit; font-size:14px;">
+              <option value="" disabled selected>Loading users…</option>
+            </select>
             <div id="reset-user-selected" class="muted" style="margin-top:6px;display:none;"></div>
           </label>
           <label>

@@ -1814,79 +1814,97 @@
   }
 
   // Reset Password tab state + handlers
+  // UI is a pre-loaded dropdown of accessible users (filterable). Admins see all
+  // EVAA + Fusion enabled users; owners see deduped members of their owned groups.
   let resetSelectedUser = null;
-  const resetSearchInput = $("reset-user-search");
-  const resetResults = $("reset-user-results");
+  let resetUserPool = []; // full list of {id, displayName, userPrincipalName, mail}
+  let resetUserPoolLoaded = false;
+  const resetFilterInput = $("reset-user-filter");
+  const resetPicker = $("reset-user-picker");
   const resetSelectedEl = $("reset-user-selected");
   const resetSubmit = $("reset-submit");
   const resetPersonal = $("reset-personal-email");
 
-  let resetSearchTimer = null;
-  resetSearchInput.addEventListener("input", (e) => {
-    const q = e.target.value.trim();
-    resetSelectedUser = null;
-    resetSelectedEl.style.display = "none";
-    resetSubmit.disabled = true;
-    clearTimeout(resetSearchTimer);
-    if (q.length < 2) { resetResults.innerHTML = ""; return; }
-    resetSearchTimer = setTimeout(async () => {
-      try {
-        let users;
-        if (role === "owner") {
-          // Owner-mode: search only users who are members of groups the owner has access to
-          // state.groups is already filtered to owned groups during boot
-          const all = [];
-          const seen = new Set();
-          for (const g of state.groups) {
-            try {
-              const ms = await GRAPH.listGroupMembers(g.id);
-              for (const m of ms) {
-                if (m.id && !seen.has(m.id)) {
-                  seen.add(m.id);
-                  if (
-                    (m.displayName || "").toLowerCase().includes(q.toLowerCase()) ||
-                    (m.mail || "").toLowerCase().includes(q.toLowerCase()) ||
-                    (m.userPrincipalName || "").toLowerCase().includes(q.toLowerCase())
-                  ) all.push(m);
-                }
+  // Populate the dropdown lazily the first time the Reset tab becomes visible.
+  async function loadResetUserPool() {
+    if (resetUserPoolLoaded) return;
+    resetPicker.innerHTML = `<option value="" disabled selected>Loading users…</option>`;
+    try {
+      if (role === "admin") {
+        const all = await GRAPH.listAllManagedUsers();
+        resetUserPool = all
+          .filter((u) => u.accountEnabled !== false) // enabled only (disabled users can't sign in anyway)
+          .map((u) => ({ id: u.id, displayName: u.displayName, userPrincipalName: u.userPrincipalName, mail: u.mail }));
+      } else if (role === "owner") {
+        // Walk state.groups (already filtered to owned groups during boot) and dedupe members
+        const seen = new Set();
+        const collected = [];
+        for (const g of state.groups) {
+          try {
+            const ms = await GRAPH.listGroupMembers(g.id);
+            for (const m of ms) {
+              if (m.id && !seen.has(m.id)) {
+                seen.add(m.id);
+                collected.push({ id: m.id, displayName: m.displayName, userPrincipalName: m.userPrincipalName, mail: m.mail });
               }
-            } catch (_) {}
-          }
-          users = all.slice(0, 12);
-        } else {
-          users = await GRAPH.searchUsers(q);
+            }
+          } catch (_) {}
         }
-        renderResetResults(users);
-      } catch (err) {
-        showError("Search failed: " + err.message);
+        resetUserPool = collected;
       }
-    }, 250);
-  });
+      resetUserPool.sort((a, b) => (a.displayName || "").localeCompare(b.displayName || ""));
+      resetUserPoolLoaded = true;
+      renderResetPicker("");
+    } catch (err) {
+      resetPicker.innerHTML = `<option value="" disabled selected>Error loading users — ${escapeHtml(err.message)}</option>`;
+    }
+  }
 
-  function renderResetResults(users) {
-    if (!users || !users.length) {
-      resetResults.innerHTML = `<p class="muted" style="padding:6px 0;">No matching users.</p>`;
+  function renderResetPicker(filter) {
+    const f = (filter || "").toLowerCase();
+    const matches = resetUserPool.filter((u) =>
+      !f ||
+      (u.displayName || "").toLowerCase().includes(f) ||
+      (u.mail || "").toLowerCase().includes(f) ||
+      (u.userPrincipalName || "").toLowerCase().includes(f)
+    );
+    if (!matches.length) {
+      resetPicker.innerHTML = `<option value="" disabled>No users match.</option>`;
       return;
     }
-    resetResults.innerHTML = users.map((u) => `<button type="button" class="user-result" data-uid="${escapeHtml(u.id)}" data-name="${escapeHtml(u.displayName)}" data-upn="${escapeHtml(u.userPrincipalName || u.mail || "")}">
-      <span class="user-name">${escapeHtml(u.displayName)}</span>
-      <span class="user-mail muted">${escapeHtml(u.mail || u.userPrincipalName || "")}</span>
-    </button>`).join("");
-    resetResults.querySelectorAll(".user-result").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        resetSelectedUser = { id: btn.dataset.uid, displayName: btn.dataset.name, userPrincipalName: btn.dataset.upn };
-        resetSelectedEl.innerHTML = `Selected: <strong>${escapeHtml(resetSelectedUser.displayName)}</strong> (<code>${escapeHtml(resetSelectedUser.userPrincipalName)}</code>)`;
-        resetSelectedEl.style.display = "block";
-        resetResults.innerHTML = "";
-        resetSearchInput.value = resetSelectedUser.displayName;
-        resetSubmit.disabled = !resetPersonal.value.trim();
-      });
-    });
+    resetPicker.innerHTML = matches
+      .map((u) => `<option value="${escapeHtml(u.id)}" data-upn="${escapeHtml(u.userPrincipalName || u.mail || "")}" data-name="${escapeHtml(u.displayName || "")}">${escapeHtml(u.displayName || "(no name)")} — ${escapeHtml(u.mail || u.userPrincipalName || "")}</option>`)
+      .join("");
   }
+
+  resetFilterInput.addEventListener("input", (e) => {
+    renderResetPicker(e.target.value.trim());
+  });
+
+  resetPicker.addEventListener("change", () => {
+    const opt = resetPicker.selectedOptions[0];
+    if (!opt || !opt.value) {
+      resetSelectedUser = null;
+      resetSelectedEl.style.display = "none";
+      resetSubmit.disabled = true;
+      return;
+    }
+    resetSelectedUser = { id: opt.value, displayName: opt.dataset.name, userPrincipalName: opt.dataset.upn };
+    resetSelectedEl.innerHTML = `Selected: <strong>${escapeHtml(resetSelectedUser.displayName)}</strong> (<code>${escapeHtml(resetSelectedUser.userPrincipalName)}</code>)`;
+    resetSelectedEl.style.display = "block";
+    resetSubmit.disabled = !resetPersonal.value.trim();
+  });
 
   resetPersonal.addEventListener("input", () => {
     resetSubmit.disabled = !resetSelectedUser || !resetPersonal.value.trim();
   });
+
+  // Trigger pool load when the Reset tab becomes the active view.
+  // (The tab switcher just toggles view visibility; we hook into clicks on the Reset tab.)
+  const _resetTabBtn = document.querySelector('.tab-btn[data-tab="reset"]');
+  if (_resetTabBtn) {
+    _resetTabBtn.addEventListener("click", () => { loadResetUserPool(); });
+  }
 
   $("reset-form").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -1986,7 +2004,17 @@
     } catch (err) {
       progress.classList.add("hidden");
       form.classList.remove("hidden");
-      showError("Password reset failed: " + err.message);
+      // 403 here is usually a stale MSAL token missing User.ReadWrite.All — a sign-out + sign-in fixes it.
+      const isAuthRequestDenied = (err.message || "").includes("Authorization_RequestDenied")
+        || (err.message || "").includes("Insufficient privileges");
+      if (isAuthRequestDenied) {
+        showError(
+          "Password reset failed (403 Authorization_RequestDenied). This usually means your sign-in token is missing the User.ReadWrite.All scope. " +
+          "Click your name in the top-right → Sign out, then sign back in, and try again."
+        );
+      } else {
+        showError("Password reset failed: " + err.message);
+      }
     }
   });
 })();
