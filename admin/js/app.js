@@ -1921,25 +1921,20 @@
 
     try {
       if (role === "owner") {
-        // Owner path: notify portaladmins; admin performs the reset
-        const adminMail = AUTH.getAccount()?.username || "(unknown)";
-        const adminName = AUTH.getAccount()?.name || adminMail;
-        const html = `<p>Group owner <strong>${escapeHtml(adminName)}</strong> (${escapeHtml(adminMail)}) has requested a password reset.</p>
-          <ul>
-            <li><strong>User:</strong> ${escapeHtml(resetSelectedUser.displayName)} (<code>${escapeHtml(resetSelectedUser.userPrincipalName)}</code>)</li>
-            <li><strong>Send new credentials to:</strong> <a href="mailto:${escapeHtml(personalEmail)}">${escapeHtml(personalEmail)}</a></li>
-          </ul>
-          <p>Open the EVAA Admin Portal &rarr; Reset Password tab to perform the reset.</p>`;
-        await GRAPH.sendMail(
-          ["portaladmins@evaasports.org"],
-          `[EVAA] Password reset requested for ${resetSelectedUser.displayName}`,
-          html,
-        );
+        // Owner path: file a Pending row in PasswordResetRequests via the helper flow.
+        // The approval flow picks it up, emails portaladmin@ for approval, and on
+        // Approve does the actual passwordProfile PATCH + sends credentials to personalEmail.
+        await GRAPH.submitPasswordReset({
+          targetUserId: resetSelectedUser.id,
+          targetUserUpn: resetSelectedUser.userPrincipalName,
+          targetUserDisplayName: resetSelectedUser.displayName,
+          personalEmail,
+        });
         logAction("submitted password reset request", resetSelectedUser.displayName, resetSelectedUser.id, { sendTo: personalEmail });
         progress.classList.add("hidden");
         result.classList.remove("hidden");
-        result.innerHTML = `<h4>✓ Request submitted</h4>
-          <p>An admin has been notified to reset <strong>${escapeHtml(resetSelectedUser.displayName)}</strong>'s password and send the new credentials to <strong>${escapeHtml(personalEmail)}</strong>.</p>
+        result.innerHTML = `<h4>✓ Reset request submitted</h4>
+          <p>An admin will review and approve the request. Once approved, new credentials for <strong>${escapeHtml(resetSelectedUser.displayName)}</strong> will be sent to <strong>${escapeHtml(personalEmail)}</strong> automatically. You'll receive a confirmation email when it's done.</p>
           <div class="modal-actions"><button id="reset-done" class="btn-primary">Done</button></div>`;
       } else {
         // Admin path: generate password, PATCH passwordProfile, send email

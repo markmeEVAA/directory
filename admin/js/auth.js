@@ -7,19 +7,26 @@ const AUTH = (() => {
   const CLIENT_ID = "74b79a84-6ea0-4c32-beae-25ed9bdc249f";
 
   // Scopes the admin portal needs. All must be granted (delegated) on the app reg.
-  //   User.Read                — current user profile
-  //   Group.Read.All           — list groups + members + owners
-  //   GroupMember.Read.All     — read group memberships
-  //   Group.ReadWrite.All      — add/remove members + owners
-  //   User.ReadWrite.All       — create / update / disable / enable users; assign licenses
-  //   Mail.Send                — send welcome + admin-notify emails as the signed-in user
-  //   Sites.ReadWrite.All      — write rows to MemberRequests SharePoint list (owner-mode Add/Remove)
+  //   User.Read                  — current user profile
+  //   Group.Read.All             — list groups + members + owners
+  //   GroupMember.Read.All       — read group memberships
+  //   Group.ReadWrite.All        — add/remove members + owners
+  //   User.ReadWrite.All         — create / update / disable / enable users; assign licenses
+  //   Directory.AccessAsUser.All — REQUIRED in addition to User.ReadWrite.All for
+  //                                passwordProfile updates (admin-mode password reset).
+  //                                Per MS docs (May 2026), User.ReadWrite.All alone is no
+  //                                longer sufficient for password reset / user disable —
+  //                                you also need Directory.AccessAsUser.All. Without this
+  //                                scope, Graph returns 403 Authorization_RequestDenied.
+  //   Mail.Send                  — send welcome + admin-notify emails as the signed-in user
+  //   Sites.ReadWrite.All        — write rows to MemberRequests SharePoint list (owner-mode Add/Remove)
   const SCOPES = [
     "User.Read",
     "Group.Read.All",
     "GroupMember.Read.All",
     "Group.ReadWrite.All",
     "User.ReadWrite.All",
+    "Directory.AccessAsUser.All",
     "Mail.Send",
     "Sites.ReadWrite.All",
   ];

@@ -321,6 +321,43 @@ const GRAPH = (() => {
     return resp.json().catch(() => ({ status: "submitted" }));
   }
 
+  // ---------------- Submit Password Reset Request (owner-mode approval flow) ----------------
+  // Owner-mode Reset Password is routed via the "EVAA - Submit Password Reset"
+  // helper flow → writes a Pending row to PasswordResetRequests SP list →
+  // separate Approval Flow triggers, sends an approval email to portaladmin@,
+  // and on Approve generates a new temp password, PATCHes the user via Graph,
+  // and emails credentials to the personal address.
+  //
+  // SAS-signed URL — safe to ship in client JS because the action still requires
+  // admin approval before any password change happens.
+  const SUBMIT_PASSWORD_RESET_URL =
+    "https://defaultb5897a1bb85b42bd8e619b021b67d2.ce.environment.api.powerplatform.com:443/" +
+    "powerautomate/automations/direct/workflows/65aa545968584eab8a6e97c3e7aba019/" +
+    "triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&" +
+    "sig=CArZq1A_udxiYzBdxEgt4XnhHqFcZ6jJ4oT0q7CNQmo";
+
+  async function submitPasswordReset(payload) {
+    const me = await getMe();
+    const body = {
+      requesterEmail: me?.userPrincipalName || me?.mail || "",
+      requesterName: me?.displayName || "",
+      targetUserId: payload.targetUserId,
+      targetUserUpn: payload.targetUserUpn,
+      targetUserDisplayName: payload.targetUserDisplayName,
+      personalEmail: payload.personalEmail,
+    };
+    const resp = await fetch(SUBMIT_PASSWORD_RESET_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => "");
+      throw new Error(`Submit-password-reset flow ${resp.status}: ${errText.slice(0, 300)}`);
+    }
+    return resp.json().catch(() => ({ status: "submitted" }));
+  }
+
   return {
     getMe,
     isPortalAdmin,
@@ -343,6 +380,7 @@ const GRAPH = (() => {
     sendMail,
     getSubscribedSkus,
     createMemberRequest,
+    submitPasswordReset,
     EVAA_LICENSE_SKU_ID,
   };
 })();
