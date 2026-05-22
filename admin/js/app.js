@@ -531,7 +531,7 @@
 
   // "Disable account only (preserve data)" — middle option.
   // Removes from all managed groups, disables account, KEEPS the license so mailbox/OneDrive
-  // stay preserved indefinitely. Emails portaladmins@ so the group can decide what to do next.
+  // stay preserved indefinitely. Emails portaladmin@ so the group can decide what to do next.
   // Works in either group context (from group detail x) or user context (from user detail offboard).
   $("remove-preserve-btn").addEventListener("click", async () => {
     if (!pendingRemove) return;
@@ -545,7 +545,7 @@
           <li>Remove from ${totalGroups} managed group${totalGroups === 1 ? "" : "s"}</li>
           <li>Disable the account (can't sign in)</li>
           <li><strong>KEEP the EVAA license</strong> (mailbox + OneDrive preserved indefinitely)</li>
-          <li>Email portaladmins@evaasports.org with a summary</li>
+          <li>Email portaladmin@evaasports.org with a summary</li>
         </ul>
         <p class="muted">License cost (~$3/mo) continues until you fully offboard.</p>`,
       okLabel: "Disable & preserve",
@@ -601,7 +601,7 @@
           groupContextName, removedGroupsHtml,
         });
         await GRAPH.sendMail(
-          ["portaladmins@evaasports.org"],
+          ["portaladmin@evaasports.org"],
           `[EVAA Admin] ${userName} disabled — data preserved`,
           html,
         );
@@ -1405,7 +1405,7 @@
   // CREATE NEW USER — shared modal, invoked from both Add Member modal and Members view
   // =====================================================================
 
-  // Email body sent to portaladmins@ when an admin picks "Disable account only (preserve data)".
+  // Email body sent to portaladmin@ when an admin picks "Disable account only (preserve data)".
   // Gives the admin group context + explicit next-step options.
   function buildPreserveDataAdminEmailHtml({ adminName, adminMail, userName, userId, groupContextName, removedGroupsHtml }) {
     const adminNameSafe = escapeHtml(adminName);
