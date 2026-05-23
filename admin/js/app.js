@@ -1121,7 +1121,7 @@
         <em>To recover within the 30-day window:</em> click <strong>Re-enable &amp; re-license</strong> below.
         After 30 days, the user object remains but their email + files are unrecoverable from this UI.
         <br><br>
-        <span class="muted">Exact days-remaining isn't shown here because Graph doesn't expose the license-removal timestamp on the user object. Check Entra audit logs if you need the precise date.</span>
+        <span class="muted">If this user needs to be permanently removed sooner than the 30-day window, contact <a href="mailto:web-admin@evaasports.org">web-admin@evaasports.org</a>.</span>
       `;
       banner.classList.remove("hidden");
     } else if (isPreservedData) {
