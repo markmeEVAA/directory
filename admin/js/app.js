@@ -15,6 +15,7 @@
     members: $("members-view"),
     userDetail: $("user-detail-view"),
     reset: $("reset-view"),
+    audit: $("audit-view"),
   };
   const tabNav = $("tab-nav");
   const userArea = $("user-area");
@@ -262,6 +263,7 @@
       document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b === btn));
       if (activeTab === "groups") show("groups");
       else if (activeTab === "reset") show("reset");
+      else if (activeTab === "audit") { show("audit"); ensureAuditLoaded(); }
       else { show("members"); ensureMembersLoaded(); }
     });
   });
@@ -793,14 +795,34 @@
     }
   }
 
-  // Lightweight audit log — console for now; SharePoint AdminActionLog list is Phase 2.2.
+  // Audit log: console.log for local debugging + fire-and-forget SP write
+  // to AdminActionLog list. SP write errors are swallowed inside GRAPH.logAuditEntry
+  // so admin actions never block on logging failures.
   function logAction(action, targetName, targetId, extra) {
     const who = AUTH.getAccount()?.username || "(unknown)";
-    const group = currentDetailGroup ? `${currentDetailGroup.displayName} (${currentDetailGroup.id})` : null;
+    const groupName = extra?.group || (currentDetailGroup?.displayName ?? null);
+    const groupContext = currentDetailGroup
+      ? `${currentDetailGroup.displayName} (${currentDetailGroup.id})`
+      : null;
     const entry = { ts: new Date().toISOString(), admin: who, action, targetName, targetId };
-    if (group) entry.group = group;
+    if (groupContext) entry.group = groupContext;
     if (extra) Object.assign(entry, extra);
     console.log("[AUDIT]", JSON.stringify(entry));
+
+    // Fire-and-forget SP write. Build Notes from extra so caller context
+    // (disposition, sentTo, jobTitle change, etc.) lands in the audit row.
+    const notesPayload = { ts: entry.ts };
+    if (targetId) notesPayload.targetId = targetId;
+    if (extra) Object.assign(notesPayload, extra);
+    GRAPH.logAuditEntry({
+      actor: who,
+      action,
+      targetName,
+      targetId,
+      targetGroup: groupName,
+      result: "Success",
+      notes: JSON.stringify(notesPayload),
+    });
   }
 
   // =====================================================================
@@ -2011,5 +2033,155 @@
         showError("Password reset failed: " + err.message);
       }
     }
+  });
+
+  // =====================================================================
+  // AUDIT LOG TAB — viewer for AdminActionLog SP list
+  // =====================================================================
+  const auditState = {
+    loaded: false,
+    items: [],          // array of {id, fields:{Title,Actor,ActionType,TargetUser,TargetGroup,Result,ErrorDetail,Notes,Created,Modified}}
+    nextLink: null,     // @odata.nextLink for "Load more"
+    expandedIds: new Set(),
+  };
+
+  async function ensureAuditLoaded() {
+    if (auditState.loaded) return;
+    await refreshAuditLog();
+  }
+
+  async function refreshAuditLog() {
+    const loadingEl = $("audit-loading");
+    const errorEl = $("audit-error");
+    const tableWrap = $("audit-table-wrap");
+    loadingEl.classList.remove("hidden");
+    errorEl.classList.add("hidden");
+    tableWrap.classList.add("hidden");
+    try {
+      const resp = await GRAPH.listAuditLog({ top: 100 });
+      auditState.items = (resp.value || []).map((it) => ({
+        id: it.id,
+        fields: it.fields || {},
+        createdDateTime: it.createdDateTime,
+        lastModifiedDateTime: it.lastModifiedDateTime,
+      }));
+      auditState.nextLink = resp["@odata.nextLink"] || null;
+      auditState.loaded = true;
+      renderAuditTable();
+      loadingEl.classList.add("hidden");
+      tableWrap.classList.remove("hidden");
+    } catch (err) {
+      loadingEl.classList.add("hidden");
+      errorEl.textContent = "Failed to load audit log: " + (err.message || err);
+      errorEl.classList.remove("hidden");
+    }
+  }
+
+  async function loadMoreAuditLog() {
+    if (!auditState.nextLink) return;
+    const btn = $("audit-load-more-btn");
+    btn.disabled = true;
+    btn.textContent = "Loading…";
+    try {
+      const resp = await GRAPH.listAuditLog({ nextLink: auditState.nextLink });
+      const more = (resp.value || []).map((it) => ({
+        id: it.id,
+        fields: it.fields || {},
+        createdDateTime: it.createdDateTime,
+        lastModifiedDateTime: it.lastModifiedDateTime,
+      }));
+      auditState.items.push(...more);
+      auditState.nextLink = resp["@odata.nextLink"] || null;
+      renderAuditTable();
+    } catch (err) {
+      showError("Load more failed: " + (err.message || err));
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Load more";
+    }
+  }
+
+  function applyAuditFilters(items) {
+    const actorQ = ($("audit-filter-actor").value || "").trim().toLowerCase();
+    const actionQ = $("audit-filter-action").value || "";
+    const resultQ = $("audit-filter-result").value || "";
+    const dateQ = $("audit-filter-date").value || "all";
+    const cutoff = dateQ === "all" ? null : Date.now() - parseInt(dateQ, 10) * 24 * 3600 * 1000;
+    return items.filter((it) => {
+      const f = it.fields || {};
+      if (actorQ && !(f.Actor || "").toLowerCase().includes(actorQ)) return false;
+      if (actionQ && f.ActionType !== actionQ) return false;
+      if (resultQ && f.Result !== resultQ) return false;
+      if (cutoff !== null) {
+        const t = Date.parse(it.createdDateTime || it.lastModifiedDateTime || "");
+        if (isNaN(t) || t < cutoff) return false;
+      }
+      return true;
+    });
+  }
+
+  function fmtAuditTime(iso) {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    // Local time, short — e.g. "5/22 9:47 PM"
+    return d.toLocaleString(undefined, { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" });
+  }
+
+  function renderAuditTable() {
+    const tbody = $("audit-tbody");
+    const countEl = $("audit-row-count");
+    const loadMoreBtn = $("audit-load-more-btn");
+    const filtered = applyAuditFilters(auditState.items);
+    countEl.textContent = filtered.length === auditState.items.length
+      ? `${filtered.length} entries`
+      : `${filtered.length} of ${auditState.items.length} entries`;
+
+    if (filtered.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="7" class="muted" style="text-align:center; padding:18px;">No matching entries.</td></tr>`;
+    } else {
+      tbody.innerHTML = filtered.map((it) => {
+        const f = it.fields || {};
+        const isExpanded = auditState.expandedIds.has(it.id);
+        const resultClass = (f.Result === "Failure") ? "audit-result-fail"
+          : (f.Result === "Partial") ? "audit-result-partial"
+          : "audit-result-success";
+        const detailRow = isExpanded ? `<tr class="audit-detail-row" data-audit-id="${escapeHtml(it.id)}">
+          <td colspan="7" class="audit-detail-cell">
+            <div><strong>Notes:</strong> <code style="white-space:pre-wrap;">${escapeHtml(f.Notes || "(none)")}</code></div>
+            ${f.ErrorDetail ? `<div style="margin-top:6px;"><strong>Error:</strong> <code style="white-space:pre-wrap;color:#a00;">${escapeHtml(f.ErrorDetail)}</code></div>` : ""}
+            <div class="muted" style="margin-top:6px; font-size:11px;">Item ID ${escapeHtml(it.id)} · Title: ${escapeHtml(f.Title || "")}</div>
+          </td>
+        </tr>` : "";
+        return `<tr class="audit-row" data-audit-id="${escapeHtml(it.id)}">
+          <td>${escapeHtml(fmtAuditTime(it.createdDateTime))}</td>
+          <td>${escapeHtml(f.Actor || "—")}</td>
+          <td>${escapeHtml(f.ActionType || "—")}</td>
+          <td>${escapeHtml(f.TargetUser || "—")}</td>
+          <td>${escapeHtml(f.TargetGroup || "—")}</td>
+          <td><span class="${resultClass}">${escapeHtml(f.Result || "—")}</span></td>
+          <td><button class="link-button" data-toggle-audit="${escapeHtml(it.id)}">${isExpanded ? "▾" : "▸"}</button></td>
+        </tr>${detailRow}`;
+      }).join("");
+      // Wire expand toggles
+      tbody.querySelectorAll("[data-toggle-audit]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const id = btn.dataset.toggleAudit;
+          if (auditState.expandedIds.has(id)) auditState.expandedIds.delete(id);
+          else auditState.expandedIds.add(id);
+          renderAuditTable();
+        });
+      });
+    }
+    loadMoreBtn.classList.toggle("hidden", !auditState.nextLink);
+  }
+
+  // Wire audit-tab controls (deferred until after DOM elements exist; they're in index.html now)
+  $("audit-refresh-btn").addEventListener("click", refreshAuditLog);
+  $("audit-load-more-btn").addEventListener("click", loadMoreAuditLog);
+  ["audit-filter-actor", "audit-filter-action", "audit-filter-result", "audit-filter-date"].forEach((id) => {
+    const el = $(id);
+    if (el) el.addEventListener("input", renderAuditTable);
+    if (el) el.addEventListener("change", renderAuditTable);
   });
 })();

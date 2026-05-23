@@ -29,6 +29,7 @@
       <button class="tab-btn active" data-tab="groups">Manage Groups</button>
       <button class="tab-btn" data-tab="members">Manage Members</button>
       <button class="tab-btn" data-tab="reset">Reset Password</button>
+      <button class="tab-btn tab-btn-audit" data-tab="audit">Audit Log</button>
     </div>
   </nav>
 
@@ -262,6 +263,85 @@
 
         <div id="reset-progress" class="hidden" style="margin-top:14px;"></div>
         <div id="reset-result" class="hidden" style="margin-top:14px;"></div>
+      </div>
+    </section>
+
+    <!-- ============ AUDIT LOG VIEW (admin-only) ============ -->
+    <section id="audit-view" class="view hidden">
+      <div class="card">
+        <h2>Audit Log</h2>
+        <p class="muted">Every admin or owner action that touches users or groups is recorded here. Newest entries first.</p>
+
+        <div class="audit-filters">
+          <label>
+            <span>Actor</span>
+            <input type="text" id="audit-filter-actor" placeholder="email contains…" autocomplete="off" />
+          </label>
+          <label>
+            <span>Action type</span>
+            <select id="audit-filter-action">
+              <option value="">— all —</option>
+              <option value="AddMember">AddMember</option>
+              <option value="RemoveMember">RemoveMember</option>
+              <option value="AddOwner">AddOwner</option>
+              <option value="RemoveOwner">RemoveOwner</option>
+              <option value="CreateUser">CreateUser</option>
+              <option value="DisableUser">DisableUser</option>
+              <option value="EnableUser">EnableUser</option>
+              <option value="Offboard">Offboard</option>
+              <option value="PreserveData">PreserveData</option>
+              <option value="ResetPassword">ResetPassword</option>
+              <option value="RestoreUser">RestoreUser</option>
+              <option value="Other">Other</option>
+            </select>
+          </label>
+          <label>
+            <span>Result</span>
+            <select id="audit-filter-result">
+              <option value="">— all —</option>
+              <option value="Success">Success</option>
+              <option value="Failure">Failure</option>
+              <option value="Partial">Partial</option>
+            </select>
+          </label>
+          <label>
+            <span>Date range</span>
+            <select id="audit-filter-date">
+              <option value="all">all time</option>
+              <option value="1">last 24 hours</option>
+              <option value="7">last 7 days</option>
+              <option value="30">last 30 days</option>
+              <option value="90">last 90 days</option>
+            </select>
+          </label>
+          <div class="audit-actions">
+            <button id="audit-refresh-btn" class="btn-secondary">↻ Refresh</button>
+            <span id="audit-row-count" class="muted"></span>
+          </div>
+        </div>
+
+        <div id="audit-loading" class="muted" style="padding:18px 0;">Loading audit log…</div>
+        <div id="audit-error" class="hidden error-card" style="padding:12px; margin:8px 0; border-radius:6px;"></div>
+
+        <div id="audit-table-wrap" class="hidden" style="overflow-x:auto;">
+          <table class="data-table audit-table">
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>Actor</th>
+                <th>Action</th>
+                <th>Target user</th>
+                <th>Target group</th>
+                <th>Result</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="audit-tbody"></tbody>
+          </table>
+          <div style="margin-top:12px; text-align:center;">
+            <button id="audit-load-more-btn" class="btn-secondary hidden">Load more</button>
+          </div>
+        </div>
       </div>
     </section>
 

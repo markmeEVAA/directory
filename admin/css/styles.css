@@ -925,6 +925,7 @@ body.viewmode-owner .role-banner-owner {
 
 /* Hide admin-only UI elements when signed in as a non-admin group owner */
 body.viewmode-owner .tab-btn[data-tab="members"],
+body.viewmode-owner .tab-btn-audit,
 body.viewmode-owner #add-owner-btn,
 body.viewmode-owner #create-user-from-members-btn,
 body.viewmode-owner #create-user-from-add-btn,
@@ -936,6 +937,62 @@ body.viewmode-owner #offboard-user-btn,
 body.viewmode-owner .cu-admin-only {
   display: none !important;
 }
+
+/* Audit Log table */
+.audit-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+  align-items: flex-end;
+  margin: 12px 0 16px;
+  padding: 12px;
+  background: #f5f8fc;
+  border-radius: 6px;
+}
+.audit-filters label {
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  color: #5a6473;
+  min-width: 140px;
+}
+.audit-filters label > span {
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+.audit-filters input, .audit-filters select {
+  padding: 5px 8px;
+  font-family: inherit;
+  font-size: 13px;
+  border: 1px solid #c8d2dd;
+  border-radius: 4px;
+}
+.audit-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+.audit-table {
+  width: 100%;
+  font-size: 12px;
+}
+.audit-table th, .audit-table td {
+  padding: 6px 10px;
+  text-align: left;
+  border-bottom: 1px solid #e0e0e0;
+  vertical-align: top;
+}
+.audit-table th {
+  background: #1B4F8C;
+  color: #fff;
+  font-weight: 600;
+}
+.audit-table .audit-row:hover { background: #f5f8fc; }
+.audit-table .audit-detail-row td { background: #fafcff; padding: 10px 16px; font-size: 12px; }
+.audit-result-success { color: #0a7d2a; font-weight: 600; }
+.audit-result-fail { color: #a00; font-weight: 600; }
+.audit-result-partial { color: #c47d00; font-weight: 600; }
 
 /* Swap admin vs owner help text on the Help / landing view based on role. */
 .help-admin, .help-owner { display: none; }

@@ -358,6 +358,88 @@ const GRAPH = (() => {
     return resp.json().catch(() => ({ status: "submitted" }));
   }
 
+  // ---------------- AdminActionLog (Phase 2.4 audit log) ----------------
+  // SharePoint list at evaasports.sharepoint.com/sites/EVAABoardPortal/Lists/AdminActionLog
+  // Columns (Mark added via SP UI on 5/22/2026):
+  //   Title (built-in, auto-summary)
+  //   Actor (text — UPN of admin)
+  //   ActionType (choice: AddMember/RemoveMember/AddOwner/RemoveOwner/CreateUser/
+  //               DisableUser/EnableUser/Offboard/PreserveData/ResetPassword/RestoreUser/Other)
+  //   TargetUser (text — UPN or displayName; blank for group-only ops)
+  //   TargetGroup (text — group displayName; blank for user-level ops)
+  //   Result (choice: Success/Failure/Partial)
+  //   ErrorDetail (multi-line text)
+  //   Notes (multi-line text)
+  const ADMIN_ACTION_LOG_SITE_ID =
+    "evaasports.sharepoint.com,5c93dacd-279c-41bd-a4b0-64288b689f69,3c4714c8-a098-4f4b-bdd9-ad7a69c13740";
+  const ADMIN_ACTION_LOG_LIST_ID = "5edbe46a-ba12-4cf2-9dfa-937fa47297c4";
+
+  // Map a free-text action string (legacy logAction shape) into one of the
+  // SP Choice values. Order matters — more specific patterns checked first.
+  function mapActionType(action) {
+    const s = (action || "").toLowerCase();
+    if (s.includes("created user")) return "CreateUser";
+    if (s.includes("disabled user with data preserved")) return "PreserveData";
+    if (s.includes("offboarded fully")) return "Offboard";
+    if (s.includes("re-enabled") || s.includes("re-licensed")) return "RestoreUser";
+    if (s.includes("reset password") || s.includes("password reset")) return "ResetPassword";
+    if (s.includes("added owner")) return "AddOwner";
+    if (s.includes("removed owner")) return "RemoveOwner";
+    if (s.includes("add request")) return "AddMember";
+    if (s.includes("remove request")) return "RemoveMember";
+    if (s.includes("added") && (s.includes("member") || s.includes("user to group"))) return "AddMember";
+    if (s.includes("removed") && (s.includes("member") || s.includes("user from group") || s.includes("per-group"))) return "RemoveMember";
+    if (s.includes("disabled")) return "DisableUser";
+    if (s.includes("enabled")) return "EnableUser";
+    return "Other";
+  }
+
+  // Fire-and-forget write to AdminActionLog SP list.
+  // Errors are swallowed (logged to console.warn) so admin actions never block on logging.
+  async function logAuditEntry({ actor, action, targetName, targetId, targetGroup, result, errorDetail, notes }) {
+    try {
+      const actionType = mapActionType(action);
+      const titleParts = [actionType, "by", actor || "(unknown)"];
+      if (targetName) titleParts.push("-", targetName);
+      if (targetGroup) titleParts.push("in", targetGroup);
+      const title = titleParts.join(" ").slice(0, 250);
+      const fields = {
+        Title: title,
+        Actor: actor || "(unknown)",
+        ActionType: actionType,
+        TargetUser: targetName || "",
+        TargetGroup: targetGroup || "",
+        Result: result || "Success",
+        ErrorDetail: errorDetail || "",
+        Notes: notes || "",
+      };
+      await callGraph(
+        `/sites/${ADMIN_ACTION_LOG_SITE_ID}/lists/${ADMIN_ACTION_LOG_LIST_ID}/items`,
+        { method: "POST", body: JSON.stringify({ fields }) }
+      );
+    } catch (err) {
+      console.warn("[AUDIT-FALLBACK]", err.message || err, { action, targetName, targetId, targetGroup });
+    }
+  }
+
+  // Fetch recent audit log entries (viewer tab).
+  // Returns the full Graph response so callers can use @odata.nextLink for pagination.
+  // SP $orderby support via Graph is limited; we fetch by most-recently-modified at the
+  // list-item level (lastModifiedDateTime). Client sorts/filters further.
+  async function listAuditLog({ top = 100, nextLink = null } = {}) {
+    if (nextLink) {
+      // nextLink is already a full URL with $skiptoken; use raw fetch
+      const token = await AUTH.getToken();
+      const resp = await fetch(nextLink, {
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      });
+      if (!resp.ok) throw new Error(`Audit log fetch ${resp.status}`);
+      return resp.json();
+    }
+    const path = `/sites/${ADMIN_ACTION_LOG_SITE_ID}/lists/${ADMIN_ACTION_LOG_LIST_ID}/items?$expand=fields&$top=${top}&$orderby=lastModifiedDateTime desc`;
+    return await callGraph(path);
+  }
+
   return {
     getMe,
     isPortalAdmin,
@@ -381,6 +463,8 @@ const GRAPH = (() => {
     getSubscribedSkus,
     createMemberRequest,
     submitPasswordReset,
+    logAuditEntry,
+    listAuditLog,
     EVAA_LICENSE_SKU_ID,
   };
 })();
