@@ -1,0 +1,48 @@
+<!doctype html>
+<!--
+  SportsEngine OAuth callback page.
+  Deploy to the PUBLIC directory repo at: sportsengine-callback.html
+  Live URL must EXACTLY match the Redirect URI registered in SE:
+      https://markmeevaa.github.io/directory/sportsengine-callback.html
+  Contains no secrets — it only reads the ?code= that SE puts in the URL.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EVAA — SportsEngine Auth</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 6vh auto; padding: 0 1rem; color: #111; }
+    h1 { color: #1B4F8C; }
+    code, .box { font-family: ui-monospace, monospace; }
+    .box { background: #f4f6f9; border: 1px solid #d0d7e2; border-radius: 8px; padding: 1rem; word-break: break-all; }
+    button { background: #1B4F8C; color: #fff; border: 0; border-radius: 6px; padding: .5rem 1rem; font-size: 1rem; cursor: pointer; margin-top: .75rem; }
+    .err { color: #b00020; }
+  </style>
+</head>
+<body>
+  <h1>EVAA SportsEngine authorization</h1>
+  <div id="out">Reading response…</div>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const code  = params.get('code');
+    const error = params.get('error');
+    const state = params.get('state');
+    const out = document.getElementById('out');
+
+    if (error) {
+      out.innerHTML = '<p class="err">Authorization failed: <b>' +
+        error + '</b> — ' + (params.get('error_description') || '') + '</p>';
+    } else if (code) {
+      out.innerHTML =
+        '<p>✅ Authorization succeeded. Copy this code and paste it back to Claude:</p>' +
+        '<div class="box" id="code">' + code + '</div>' +
+        '<button onclick="navigator.clipboard.writeText(document.getElementById(\'code\').textContent)">Copy code</button>' +
+        (state ? '<p style="color:#667;font-size:.85rem">state: <code>' + state + '</code></p>' : '');
+    } else {
+      out.innerHTML = '<p class="err">No code or error in the URL. Did you reach this page directly instead of via SportsEngine?</p>';
+    }
+  </script>
+</body>
+</html>
