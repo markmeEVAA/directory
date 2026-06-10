@@ -96,7 +96,17 @@ const EMAILLISTS = (() => {
       const email = document.getElementById("el-add-email").value.trim();
       const name = document.getElementById("el-add-name").value.trim();
       if (!email || !email.includes("@")) { alert("Enter a valid email address."); return; }
-      try { await addOverride(reg, "Add", email, name); toast(`Queued: add ${email}`); document.getElementById("el-add-email").value = ""; document.getElementById("el-add-name").value = ""; }
+      try {
+        await addOverride(reg, "Add", email, name);
+        toast(`Saved: ${email} will be added at the next sync`);
+        // optimistic: show it immediately as pending so the change is visible right away
+        const tb = document.getElementById("el-tbody");
+        const tr = document.createElement("tr");
+        tr.style.background = "#fffbe6";
+        tr.innerHTML = `<td>${esc(email)}</td><td>${esc(name)} <span class="muted">(pending — applies at next sync)</span></td><td></td>`;
+        tb.prepend(tr);
+        document.getElementById("el-add-email").value = ""; document.getElementById("el-add-name").value = "";
+      }
       catch (e) { alert("Failed to queue add: " + e.message); }
     });
 
