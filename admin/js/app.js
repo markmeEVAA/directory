@@ -16,6 +16,7 @@
     userDetail: $("user-detail-view"),
     reset: $("reset-view"),
     audit: $("audit-view"),
+    emaillists: $("emaillists-view"),
   };
   const tabNav = $("tab-nav");
   const userArea = $("user-area");
@@ -177,6 +178,12 @@
   // <body> would tint the whole page).
   document.body.classList.add(`viewmode-${role}`);
 
+  // Email Lists tab is admin-only at launch (EMAIL_LISTS_OWNER_ENABLED = false).
+  if (role !== "admin") {
+    const elTab = document.querySelector('.tab-btn[data-tab="emaillists"]');
+    if (elTab) elTab.style.display = "none";
+  }
+
   // State for groups view
   const state = {
     groups,
@@ -264,6 +271,7 @@
       if (activeTab === "groups") show("groups");
       else if (activeTab === "reset") show("reset");
       else if (activeTab === "audit") { show("audit"); ensureAuditLoaded(); }
+      else if (activeTab === "emaillists") { show("emaillists"); EMAILLISTS.load(); }
       else { show("members"); ensureMembersLoaded(); }
     });
   });

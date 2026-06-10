@@ -30,6 +30,7 @@
       <button class="tab-btn" data-tab="members">Manage Members</button>
       <button class="tab-btn" data-tab="reset">Reset Password</button>
       <button class="tab-btn tab-btn-audit" data-tab="audit">Audit Log</button>
+      <button class="tab-btn tab-btn-emaillists" data-tab="emaillists">Email Lists</button>
     </div>
   </nav>
 
@@ -345,6 +346,9 @@
       </div>
     </section>
 
+    <!-- ============ EMAIL LISTS VIEW (admin-only at launch) ============ -->
+    <section id="emaillists-view" class="view hidden"></section>
+
     <!-- ============ MODALS ============ -->
 
 
@@ -519,6 +523,7 @@
   <script src="https://unpkg.com/@azure/msal-browser@3.7.1/lib/msal-browser.min.js"></script>
   <script src="js/auth.js"></script>
   <script src="js/graph.js"></script>
+  <script src="js/emaillists.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
