@@ -558,7 +558,7 @@
           <li><strong>KEEP the EVAA license</strong> (mailbox + OneDrive preserved indefinitely)</li>
           <li>Email portaladmin@evaasports.org with a summary</li>
         </ul>
-        <p class="muted">License cost (~$3/mo) continues until you fully offboard.</p>`,
+        <p class="muted">Mailbox + OneDrive stay intact until you fully offboard.</p>`,
       okLabel: "Disable & preserve",
       okClass: "btn-warning",
     });
@@ -1159,7 +1159,7 @@
       banner.className = "user-state-banner banner-preserved";
       banner.innerHTML = `
         <strong>This user is disabled but data is preserved.</strong>
-        Account can't sign in. License is still assigned, so mailbox + OneDrive are intact (~$3/mo cost continues).
+        Account can't sign in. License is still assigned, so mailbox + OneDrive are intact.
         Portal admins were notified by email at the time this happened.
         <br><br>
         <em>Options:</em> <strong>Re-enable &amp; re-license</strong> to restore access, or <strong>Offboard</strong> to remove the license (starts the 30-day data clock).
@@ -1464,7 +1464,7 @@
         </ul>
 
         <h3 style="color:#1B4F8C;font-size:14px;margin:18px 0 6px;">Why this matters</h3>
-        <p style="margin:0 0 12px;font-size:14px;line-height:1.5;">Keeping the license assigned (~$3/mo) means we can recover the user's data later. With <em>Offboard fully</em>, Exchange would have started a 30-day countdown to permanently delete the mailbox + OneDrive.</p>
+        <p style="margin:0 0 12px;font-size:14px;line-height:1.5;">Keeping the license assigned means we can recover the user's data later. With <em>Offboard fully</em>, Exchange would have started a 30-day countdown to permanently delete the mailbox + OneDrive.</p>
 
         <h3 style="color:#1B4F8C;font-size:14px;margin:18px 0 6px;">Options for the group to decide</h3>
         <ol style="margin:0 0 12px;padding-left:22px;font-size:14px;line-height:1.6;">
