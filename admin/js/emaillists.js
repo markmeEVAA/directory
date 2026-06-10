@@ -56,7 +56,18 @@ const EMAILLISTS = (() => {
 
   async function load() {
     root().innerHTML = `<div class="card"><p class="loading">Loading email lists…</p></div>`;
-    try { renderList(await getRegistry()); }
+    try {
+      let regs = await getRegistry();
+      const isAdmin = await GRAPH.isPortalAdmin();
+      if (!isAdmin) {
+        // board leader (owner): show only lists for groups they own
+        const me = await GRAPH.getMe();
+        const owned = await GRAPH.getUserOwnedGroups(me.id);
+        const ownedMails = new Set(owned.map((g) => (g.mail || "").toLowerCase()).filter(Boolean));
+        regs = regs.filter((x) => ownedMails.has((x.f.BoardGroup || "").toLowerCase()));
+      }
+      renderList(regs);
+    }
     catch (e) { root().innerHTML = `<div class="card error-card"><h2>Couldn't load</h2><p>${esc(e.message)}</p></div>`; }
   }
 

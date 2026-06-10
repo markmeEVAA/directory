@@ -178,8 +178,9 @@
   // <body> would tint the whole page).
   document.body.classList.add(`viewmode-${role}`);
 
-  // Email Lists tab is admin-only at launch (EMAIL_LISTS_OWNER_ENABLED = false).
-  if (role !== "admin") {
+  // Email Lists tab: admins + group owners (board leaders). Owners are scoped to
+  // their own sport's lists inside the tab (EMAIL_LISTS_OWNER_ENABLED = true).
+  if (role !== "admin" && role !== "owner") {
     const elTab = document.querySelector('.tab-btn[data-tab="emaillists"]');
     if (elTab) elTab.style.display = "none";
   }
