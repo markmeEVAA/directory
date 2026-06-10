@@ -71,17 +71,62 @@ const EMAILLISTS = (() => {
     catch (e) { root().innerHTML = `<div class="card error-card"><h2>Couldn't load</h2><p>${esc(e.message)}</p></div>`; }
   }
 
+  const slug = (s) => String(s || "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+  async function eligibleGroups() {
+    const isAdmin = await GRAPH.isPortalAdmin();
+    const me = await GRAPH.getMe();
+    const groups = isAdmin ? await GRAPH.listManagedGroups() : await GRAPH.getUserOwnedGroups(me.id);
+    return (groups || []).filter((g) => g.mail).map((g) => ({ name: g.displayName, mail: g.mail })).sort((a, b) => a.name.localeCompare(b.name));
+  }
+  async function createCustomList(name, boardMail) {
+    const a = slug(name);
+    if (!a) throw new Error("Enter a valid list name.");
+    if (!boardMail) throw new Error("Pick who's allowed to send to it.");
+    const smtp = a + "@evaasports.org";
+    const fields = { Title: smtp, RegistrationId: "manual-" + a, Sport: "(custom)", BoardGroup: boardMail, Source: "Manual", Status: "Active", RecipientCount: 0 };
+    await _g(`/sites/${SITE}/lists/${REGISTRY}/items`, { method: "POST", body: JSON.stringify({ fields }) });
+    return smtp;
+  }
+
   function renderList(regs) {
-    if (!regs.length) {
-      root().innerHTML = `<div class="card"><h2>Family Email Lists</h2><p class="muted">No family lists yet — they're auto-built nightly from SportsEngine registrations.</p></div>`;
-      return;
-    }
-    root().innerHTML = `<div class="card">
-      <h2>Family Email Lists</h2>
-      <p class="muted">Auto-built from SportsEngine registrations (Guardian 1 + 2 emails). Click a list to view recipients and add/remove people. Only the sport's <strong>board leaders</strong> can email a list; lists auto-retire 18 months after the registration's create date.</p>
-      <table class="data-table"><thead><tr><th>List address</th><th>Sport</th><th>Recipients</th><th>Expires</th></tr></thead>
-      <tbody>${regs.map((x) => { const f = x.f; return `<tr data-reg="${esc(f.RegistrationId)}" data-mail="${esc(f.Title)}" data-itemid="${esc(x.id)}" data-expires="${esc((f.ExpiresOn || "").slice(0, 10))}" style="cursor:pointer"><td>${esc(f.Title)}</td><td>${esc(f.Sport)}</td><td>${esc(f.RecipientCount)}</td><td>${esc((f.ExpiresOn || "").slice(0, 10))}</td></tr>`; }).join("")}</tbody></table></div>`;
+    const createUI = `
+      <div class="section-header" style="align-items:center">
+        <h2>Email Lists</h2>
+        <button class="btn-secondary" id="el-create-btn">+ Create custom list</button>
+      </div>
+      <div id="el-create-form" class="hidden" style="margin:0 0 14px;padding:12px;background:#f4f6f9;border-radius:8px">
+        <div class="toolbar" style="flex-wrap:wrap;gap:8px">
+          <input type="text" id="el-new-name" placeholder="List name (e.g. Tennis Boosters)" style="min-width:220px" />
+          <select id="el-new-group" style="min-width:220px;padding:6px"><option value="">Loading groups…</option></select>
+          <button class="btn-primary" id="el-new-create">Create</button>
+          <button class="btn-link" id="el-new-cancel">Cancel</button>
+        </div>
+        <p class="muted" style="margin:6px 0 0">A custom list isn't tied to any registration — you manage every recipient by hand. The group you pick is who's allowed to send to it. Add people after it's created.</p>
+      </div>`;
+    const body = regs.length
+      ? `<p class="muted">Auto lists are built from registrations (Guardian 1 + 2); custom lists you manage by hand. Click a list to view recipients, add/remove people, shorten expiry, or delete it.</p>
+         <table class="data-table"><thead><tr><th>List address</th><th>Type</th><th>Recipients</th><th>Expires</th></tr></thead>
+         <tbody>${regs.map((x) => { const f = x.f; const type = (f.RegistrationId && String(f.RegistrationId).startsWith("manual-")) ? "custom" : esc(f.Sport); return `<tr data-reg="${esc(f.RegistrationId)}" data-mail="${esc(f.Title)}" data-itemid="${esc(x.id)}" data-expires="${esc((f.ExpiresOn || "").slice(0, 10))}" style="cursor:pointer"><td>${esc(f.Title)}</td><td>${type}</td><td>${esc(f.RecipientCount)}</td><td>${esc((f.ExpiresOn || "").slice(0, 10) || "—")}</td></tr>`; }).join("")}</tbody></table>`
+      : `<p class="muted">No lists yet. Auto lists are built nightly from SportsEngine registrations — or create a custom one above.</p>`;
+    root().innerHTML = `<div class="card">${createUI}${body}</div>`;
     root().querySelectorAll("tr[data-reg]").forEach((r) => r.addEventListener("click", () => openDetail(r.dataset.reg, r.dataset.mail, r.dataset.itemid, r.dataset.expires)));
+
+    document.getElementById("el-create-btn").addEventListener("click", async () => {
+      const form = document.getElementById("el-create-form");
+      form.classList.toggle("hidden");
+      if (!form.classList.contains("hidden")) {
+        const sel = document.getElementById("el-new-group");
+        try { const gs = await eligibleGroups(); sel.innerHTML = `<option value="">Who can send to it…</option>` + gs.map((g) => `<option value="${esc(g.mail)}">${esc(g.name)}</option>`).join(""); }
+        catch (e) { sel.innerHTML = `<option value="">(couldn't load groups)</option>`; }
+      }
+    });
+    document.getElementById("el-new-cancel").addEventListener("click", () => document.getElementById("el-create-form").classList.add("hidden"));
+    document.getElementById("el-new-create").addEventListener("click", async () => {
+      const name = document.getElementById("el-new-name").value;
+      const group = document.getElementById("el-new-group").value;
+      try { const smtp = await createCustomList(name, group); toast(`Created ${smtp} — add recipients, then it builds at the next sync.`); load(); }
+      catch (e) { alert(e.message); }
+    });
   }
 
   async function openDetail(reg, mail, itemId, expires) {
