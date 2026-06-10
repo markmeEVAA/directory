@@ -64,7 +64,7 @@ const EMAILLISTS = (() => {
     }
     root().innerHTML = `<div class="card">
       <h2>Family Email Lists</h2>
-      <p class="muted">Auto-built from SportsEngine registrations (Guardian 1 + 2 emails). Click a list to view recipients and add/remove people. Only the sport's <strong>owners</strong> can email a list; lists auto-retire 18 months after the registration's create date.</p>
+      <p class="muted">Auto-built from SportsEngine registrations (Guardian 1 + 2 emails). Click a list to view recipients and add/remove people. Only the sport's <strong>board leaders</strong> can email a list; lists auto-retire 18 months after the registration's create date.</p>
       <table class="data-table"><thead><tr><th>List address</th><th>Sport</th><th>Recipients</th><th>Expires</th></tr></thead>
       <tbody>${regs.map((f) => `<tr data-reg="${esc(f.RegistrationId)}" data-mail="${esc(f.Title)}" style="cursor:pointer"><td>${esc(f.Title)}</td><td>${esc(f.Sport)}</td><td>${esc(f.RecipientCount)}</td><td>${esc((f.ExpiresOn || "").slice(0, 10))}</td></tr>`).join("")}</tbody></table></div>`;
     root().querySelectorAll("tr[data-reg]").forEach((r) => r.addEventListener("click", () => openDetail(r.dataset.reg, r.dataset.mail)));
