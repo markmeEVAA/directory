@@ -32,7 +32,10 @@ const EMAILLISTS = (() => {
 
   async function getRegistry() {
     const r = await _g(`/sites/${SITE}/lists/${REGISTRY}/items?$expand=fields&$top=500`);
-    return (r.value || []).map((i) => i.fields).filter((f) => (f.Status || "") !== "Deleted");
+    return (r.value || []).map((i) => ({ id: i.id, f: i.fields })).filter((x) => (x.f.Status || "") !== "Deleted");
+  }
+  async function patchRegistry(itemId, fields) {
+    await _g(`/sites/${SITE}/lists/${REGISTRY}/items/${itemId}/fields`, { method: "PATCH", body: JSON.stringify(fields) });
   }
   async function getMembers(dlMail) {
     const g = await _g(`/groups?$filter=${encodeURIComponent("mail eq '" + dlMail + "'")}&$select=id`);
@@ -66,21 +69,25 @@ const EMAILLISTS = (() => {
       <h2>Family Email Lists</h2>
       <p class="muted">Auto-built from SportsEngine registrations (Guardian 1 + 2 emails). Click a list to view recipients and add/remove people. Only the sport's <strong>board leaders</strong> can email a list; lists auto-retire 18 months after the registration's create date.</p>
       <table class="data-table"><thead><tr><th>List address</th><th>Sport</th><th>Recipients</th><th>Expires</th></tr></thead>
-      <tbody>${regs.map((f) => `<tr data-reg="${esc(f.RegistrationId)}" data-mail="${esc(f.Title)}" style="cursor:pointer"><td>${esc(f.Title)}</td><td>${esc(f.Sport)}</td><td>${esc(f.RecipientCount)}</td><td>${esc((f.ExpiresOn || "").slice(0, 10))}</td></tr>`).join("")}</tbody></table></div>`;
-    root().querySelectorAll("tr[data-reg]").forEach((r) => r.addEventListener("click", () => openDetail(r.dataset.reg, r.dataset.mail)));
+      <tbody>${regs.map((x) => { const f = x.f; return `<tr data-reg="${esc(f.RegistrationId)}" data-mail="${esc(f.Title)}" data-itemid="${esc(x.id)}" data-expires="${esc((f.ExpiresOn || "").slice(0, 10))}" style="cursor:pointer"><td>${esc(f.Title)}</td><td>${esc(f.Sport)}</td><td>${esc(f.RecipientCount)}</td><td>${esc((f.ExpiresOn || "").slice(0, 10))}</td></tr>`; }).join("")}</tbody></table></div>`;
+    root().querySelectorAll("tr[data-reg]").forEach((r) => r.addEventListener("click", () => openDetail(r.dataset.reg, r.dataset.mail, r.dataset.itemid, r.dataset.expires)));
   }
 
-  async function openDetail(reg, mail) {
+  async function openDetail(reg, mail, itemId, expires) {
     root().innerHTML = `<div class="card"><button class="btn-link back-link" id="el-back">← Back to lists</button><h2>${esc(mail)}</h2><p class="loading">Loading recipients…</p></div>`;
     document.getElementById("el-back").addEventListener("click", load);
-    try { renderDetail(reg, mail, await getMembers(mail)); }
+    try { renderDetail(reg, mail, await getMembers(mail), itemId, expires); }
     catch (e) { root().querySelector(".loading").textContent = "Couldn't load recipients: " + e.message; }
   }
 
-  function renderDetail(reg, mail, members) {
+  function renderDetail(reg, mail, members, itemId, expires) {
     root().innerHTML = `<div class="card">
       <button class="btn-link back-link" id="el-back">← Back to lists</button>
       <h2>${esc(mail)}</h2>
+      <div class="section-header" style="align-items:center">
+        <div class="muted">Auto-retires <strong id="el-expires">${esc(expires || "—")}</strong> · <button class="btn-link" id="el-edit-expiry">retire earlier…</button></div>
+        <button class="btn-danger" id="el-delete-list">Delete entire list</button>
+      </div>
       <p class="muted"><strong>${members.length}</strong> recipients. Add or remove below — changes are <em>queued</em> and applied at the next sync. The list itself is rebuilt from registrations automatically; your removals are remembered so they won't be re-added.</p>
       <div class="toolbar">
         <input type="email" id="el-add-email" placeholder="add an email…" style="min-width:240px" />
@@ -121,6 +128,27 @@ const EMAILLISTS = (() => {
     document.getElementById("el-filter").addEventListener("input", (e) => {
       const f = e.target.value.toLowerCase();
       document.querySelectorAll("#el-tbody tr").forEach((tr) => { tr.style.display = tr.textContent.toLowerCase().includes(f) ? "" : "none"; });
+    });
+
+    // --- registry control plane: shorten expiry / delete whole list ---
+    document.getElementById("el-edit-expiry").addEventListener("click", async () => {
+      if (!itemId) { alert("This list isn't in the registry yet — available after the first sync."); return; }
+      const v = prompt("Retire this list on (YYYY-MM-DD) — must be earlier than the current date:", expires || "");
+      if (!v) return;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) { alert("Use format YYYY-MM-DD."); return; }
+      if (expires && v >= expires) { alert("New date must be earlier than the current expiry (" + expires + ")."); return; }
+      try { await patchRegistry(itemId, { ExpiresOn: v + "T00:00:00Z" }); document.getElementById("el-expires").textContent = v; expires = v; toast("Updated — list will retire on " + v); }
+      catch (e) { alert("Failed to update expiry: " + e.message); }
+    });
+    document.getElementById("el-delete-list").addEventListener("click", async () => {
+      if (!itemId) { alert("This list isn't in the registry yet — available after the first sync."); return; }
+      if (!confirm(`Delete the ENTIRE "${mail}" list at the next sync? Every recipient is removed and the address is deleted.`)) return;
+      try {
+        await patchRegistry(itemId, { Status: "Deleted" });
+        GRAPH.logAuditEntry({ actor: (await GRAPH.getMe())?.userPrincipalName, action: "emaillist delete list", targetGroup: mail, result: "Success", notes: "queued list deletion" });
+        toast("List queued for deletion at next sync.");
+        load();
+      } catch (e) { alert("Failed to queue deletion: " + e.message); }
     });
   }
 
