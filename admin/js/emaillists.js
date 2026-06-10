@@ -9,6 +9,13 @@ const EMAILLISTS = (() => {
   const SITE = "evaasports.sharepoint.com,5c93dacd-279c-41bd-a4b0-64288b689f69,3c4714c8-a098-4f4b-bdd9-ad7a69c13740";
   const REGISTRY = "adbb503e-16ce-4c33-915e-fe46798ad8ec";   // EmailListRegistry
   const OVERRIDES = "12d30059-845a-47df-9c32-3a8501eb4ae9";  // EmailListOverrides
+  // Power Automate flow SAS URL that fires the GitHub sync on edits (true ~5-min apply).
+  // Empty string = edits apply at the nightly sync instead. Set this once the flow exists.
+  const TRIGGER_URL = "";
+  async function triggerSync() {
+    if (!TRIGGER_URL) return;
+    try { await fetch(TRIGGER_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }); } catch (e) { /* non-fatal */ }
+  }
 
   async function _g(path, options = {}) {
     const token = await AUTH.getToken();
@@ -50,6 +57,7 @@ const EMAILLISTS = (() => {
     const fields = { Title: `${action} ${email}`, RegistrationId: String(reg), ActionType: action, Email: email, RecipientName: name || "", Actor: me?.userPrincipalName || me?.mail || "" };
     await _g(`/sites/${SITE}/lists/${OVERRIDES}/items`, { method: "POST", body: JSON.stringify({ fields }) });
     GRAPH.logAuditEntry({ actor: fields.Actor, action: action === "Add" ? "emaillist add request" : "emaillist remove request", targetName: email, targetGroup: reg, result: "Success", notes: JSON.stringify({ list: reg, action }) });
+    triggerSync();
   }
 
   function root() { return document.getElementById("emaillists-view"); }
@@ -124,7 +132,7 @@ const EMAILLISTS = (() => {
     document.getElementById("el-new-create").addEventListener("click", async () => {
       const name = document.getElementById("el-new-name").value;
       const group = document.getElementById("el-new-group").value;
-      try { const smtp = await createCustomList(name, group); toast(`Created ${smtp} — add recipients, then it builds at the next sync.`); load(); }
+      try { const smtp = await createCustomList(name, group); triggerSync(); toast(`Created ${smtp} — add recipients; it builds at the next sync.`); load(); }
       catch (e) { alert(e.message); }
     });
   }
@@ -201,6 +209,7 @@ const EMAILLISTS = (() => {
       if (!confirm(`Delete the ENTIRE "${mail}" list at the next sync? Every recipient is removed and the address is deleted.`)) return;
       try {
         await patchRegistry(itemId, { Status: "Deleted" });
+        triggerSync();
         GRAPH.logAuditEntry({ actor: (await GRAPH.getMe())?.userPrincipalName, action: "emaillist delete list", targetGroup: mail, result: "Success", notes: "queued list deletion" });
         toast("List queued for deletion at next sync.");
         load();
