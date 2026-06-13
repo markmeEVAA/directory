@@ -271,13 +271,41 @@ const EMAILLISTS = (() => {
         </div>
         <p class="muted" style="margin:6px 0 0">A custom list isn't tied to any registration — you manage every recipient by hand. The group you pick is who's allowed to send to it. Add people after it's created.</p>
       </div>`;
+    const distinct = (sel) => [...new Set(regs.map((x) => x.f[sel]).filter((v) => v && v !== "All"))].sort();
+    const optList = (label, vals) => `<option value="">${label}</option>` + vals.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join("");
+    const cats = distinct("Category"), genders = distinct("Gender"), ages = distinct("AgeGroup");
+    const filterBar = (cats.length || genders.length || ages.length)
+      ? `<div class="toolbar" style="gap:8px;margin:4px 0 10px;flex-wrap:wrap">
+           <select id="el-f-cat" style="padding:5px">${optList("All types", cats)}</select>
+           <select id="el-f-gender" style="padding:5px">${optList("All genders", genders)}</select>
+           <select id="el-f-age" style="padding:5px">${optList("All ages", ages)}</select>
+           <input type="search" id="el-f-text" placeholder="filter address…" style="min-width:180px;padding:5px" />
+         </div>` : "";
     const body = regs.length
-      ? `<p class="muted">Auto lists are built from registrations (Guardian 1 + 2); custom lists you manage by hand. Click a list to view recipients, add/remove people, shorten expiry, or delete it.</p>
-         <table class="data-table"><thead><tr><th>List address</th><th>Type</th><th>Recipients</th><th>Expires</th></tr></thead>
-         <tbody>${regs.map((x) => { const f = x.f; const type = (f.RegistrationId && String(f.RegistrationId).startsWith("manual-")) ? "custom" : esc(f.Sport); return `<tr data-reg="${esc(f.RegistrationId)}" data-mail="${esc(f.Title)}" data-itemid="${esc(x.id)}" data-expires="${esc((f.ExpiresOn || "").slice(0, 10))}" style="cursor:pointer"><td>${esc(f.Title)}</td><td>${type}</td><td>${esc(f.RecipientCount)}</td><td>${esc((f.ExpiresOn || "").slice(0, 10) || "—")}</td></tr>`; }).join("")}</tbody></table>`
-      : `<p class="muted">No lists yet. Auto lists are built nightly from SportsEngine registrations — or create a custom one above.</p>`;
+      ? `<p class="muted">Auto lists are built from registrations (Guardian 1 + 2) and SportsEngine teams; custom lists you manage by hand. Click a list to view recipients, add/remove people, shorten expiry, or delete it.</p>
+         ${filterBar}
+         <table class="data-table"><thead><tr><th>List address</th><th>Type</th><th>Division</th><th>Recipients</th><th>Expires</th></tr></thead>
+         <tbody>${regs.map((x) => { const f = x.f;
+            const type = (String(f.RegistrationId || "").startsWith("manual-")) ? "custom" : (f.Category || f.Sport || "");
+            const divLabel = [f.Gender, f.AgeGroup].filter((v) => v && v !== "All").join(" ");
+            return `<tr data-reg="${esc(f.RegistrationId)}" data-mail="${esc(f.Title)}" data-itemid="${esc(x.id)}" data-expires="${esc((f.ExpiresOn || "").slice(0, 10))}" data-cat="${esc(f.Category || "")}" data-gender="${esc(f.Gender || "")}" data-age="${esc(f.AgeGroup || "")}" data-text="${esc(String(f.Title || "").toLowerCase())}" style="cursor:pointer"><td>${esc(f.Title)}</td><td>${esc(type)}</td><td>${esc(divLabel)}</td><td>${esc(f.RecipientCount)}</td><td>${esc((f.ExpiresOn || "").slice(0, 10) || "—")}</td></tr>`; }).join("")}</tbody></table>`
+      : `<p class="muted">No lists yet. Auto lists are built nightly from SportsEngine registrations + teams — or create a custom one above.</p>`;
     root().innerHTML = `<div class="card">${createUI}${body}</div>`;
     root().querySelectorAll("tr[data-reg]").forEach((r) => r.addEventListener("click", () => openDetail(r.dataset.reg, r.dataset.mail, r.dataset.itemid, r.dataset.expires)));
+
+    // Type / Gender / Age / text filters (boys vs girls, age groups, family vs coaches)
+    const elF = (id) => document.getElementById(id);
+    if (elF("el-f-cat")) {
+      const applyFilters = () => {
+        const c = elF("el-f-cat").value, g = elF("el-f-gender").value, a = elF("el-f-age").value, t = (elF("el-f-text").value || "").toLowerCase();
+        root().querySelectorAll("tr[data-reg]").forEach((r) => {
+          const ok = (!c || r.dataset.cat === c) && (!g || r.dataset.gender === g) && (!a || r.dataset.age === a) && (!t || (r.dataset.text || "").includes(t));
+          r.style.display = ok ? "" : "none";
+        });
+      };
+      ["el-f-cat", "el-f-gender", "el-f-age"].forEach((id) => elF(id).addEventListener("change", applyFilters));
+      elF("el-f-text").addEventListener("input", applyFilters);
+    }
 
     document.getElementById("el-send-btn").addEventListener("click", openCompose);
     document.getElementById("el-se-btn").addEventListener("click", openSeCreate);
