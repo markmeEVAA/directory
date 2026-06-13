@@ -144,13 +144,15 @@ const EMAILLISTS = (() => {
     const renderReg = () => {
       if (!cat.regs.length) { body.innerHTML = `<p class="muted">No registrations available for your sport.</p>`; return; }
       const rows = cat.regs.slice().sort((a, b) => String(b.RegCreated || "").localeCompare(String(a.RegCreated || "")));
-      body.innerHTML = `<p class="muted">One family list per registration (all guardian emails). "Registrants" should match your registration report.</p>
-        <table class="data-table"><thead><tr><th></th><th>Registration</th><th>Registrants</th></tr></thead><tbody>${rows.map((r) => `
+      body.innerHTML = `<p class="muted">One family list per registration (all guardian emails). "Registrants" should match your registration report. (Team lists build automatically — no action needed here.)</p>
+        <table class="data-table"><thead><tr><th style="width:28px"><input type="checkbox" id="sc-all" title="Select all"></th><th>Registration</th><th>Registrants</th></tr></thead><tbody>${rows.map((r) => `
           <tr><td style="width:28px"><input type="checkbox" class="sc-reg" data-id="${esc(r.RegistrationId)}" data-name="${esc(r.RegName)}" data-sport="${esc(r.Sport)}" data-board="${esc(r.BoardGroup)}" data-count="${esc(r.RegistrantCount)}"></td>
           <td>${esc(r.RegName)}</td><td>${esc(r.RegistrantCount)}</td></tr>`).join("")}</tbody></table>`;
+      const all = document.getElementById("sc-all");
+      if (all) all.addEventListener("change", () => document.querySelectorAll(".sc-reg").forEach((cb) => { cb.checked = all.checked; }));
     };
     const renderTeam = () => {
-      if (!cat.teams.length) { body.innerHTML = `<p class="muted">No team/season data for your sport (only sports that use SportsEngine teams show here).</p>`; return; }
+      if (!cat.teams.length) { body.innerHTML = `<p class="muted">Team lists build <strong>automatically</strong> for sports that use SportsEngine teams/seasons (and retire after the season ends) — nothing to create here.</p>`; return; }
       const t0 = cat.teams[0];
       const byDiv = {};
       cat.teams.forEach((t) => { (byDiv[t.Division || "(teams)"] = byDiv[t.Division || "(teams)"] || []).push(t); });
@@ -159,12 +161,15 @@ const EMAILLISTS = (() => {
         + (coachExists
             ? `<p class="muted" style="margin:6px 0 12px">✓ Coaches list already created.</p>`
             : `<label style="display:block;margin:6px 0 12px"><input type="checkbox" id="sc-coaches" data-sport="${esc(t0.Sport)}" data-board="${esc(t0.BoardGroup)}" data-prog="${esc(t0.ProgramId)}"> <strong>Coaches list</strong> — all ${esc(t0.Sport)} coaches</label>`);
+      html += `<label style="display:block;margin:6px 0 10px"><input type="checkbox" id="sc-all-team"> <strong>Select all teams</strong></label>`;
       Object.keys(byDiv).sort().forEach((div) => {
         html += `<div style="margin:10px 0 4px;font-weight:600">${esc(div)}</div><table class="data-table"><tbody>${byDiv[div].map((t) => `
           <tr><td style="width:28px"><input type="checkbox" class="sc-team" data-id="${esc(t.TeamId)}" data-name="${esc(t.TeamName)}" data-sport="${esc(t.Sport)}" data-board="${esc(t.BoardGroup)}" data-count="${esc(t.GuardianEmailCount)}"></td>
           <td>${esc(t.TeamName)}</td><td class="muted">${esc(t.PlayerCount)} players · ${esc(t.GuardianEmailCount)} families · ${esc(t.CoachCount)} coaches</td></tr>`).join("")}</tbody></table>`;
       });
       body.innerHTML = html;
+      const allT = document.getElementById("sc-all-team");
+      if (allT) allT.addEventListener("change", () => document.querySelectorAll(".sc-team").forEach((cb) => { cb.checked = allT.checked; }));
     };
     const setMode = (m) => {
       mode = m;
@@ -391,7 +396,8 @@ const EMAILLISTS = (() => {
       <button class="btn-link back-link" id="cm-back">← Back to lists</button>
       <h2>Send to lists</h2>
       <p class="muted">Pick one or more of your lists and write your message. Recipients go in <strong>BCC</strong> — they can't see each other or reply-all. The email is sent from your address and saved to your Sent Items.</p>
-      <div style="margin:10px 0">
+      <label style="display:block;margin:8px 0 4px;font-weight:600"><input type="checkbox" id="cm-all"> Select all</label>
+      <div style="margin:4px 0 10px">
         ${lists.map((x) => `<label style="display:block;margin:4px 0"><input type="checkbox" class="cm-list" data-mail="${esc(x.f.Title)}" data-count="${esc(x.f.RecipientCount || 0)}"> ${esc(x.f.Title)} <span class="muted">· ${esc(x.f.RecipientCount || 0)} recipients</span></label>`).join("")}
       </div>
       <div class="muted" id="cm-total" style="margin:6px 0">Selected: 0 lists · ~0 recipients</div>
@@ -408,6 +414,8 @@ const EMAILLISTS = (() => {
       document.getElementById("cm-total").textContent = `Selected: ${sel.length} list${sel.length === 1 ? "" : "s"} · ~${total} recipients`;
     };
     document.querySelectorAll(".cm-list").forEach((cb) => cb.addEventListener("change", updateTotal));
+    const cmAll = document.getElementById("cm-all");
+    if (cmAll) cmAll.addEventListener("change", () => { document.querySelectorAll(".cm-list").forEach((cb) => { cb.checked = cmAll.checked; }); updateTotal(); });
     document.getElementById("cm-send").addEventListener("click", onSend);
   }
 
