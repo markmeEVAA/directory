@@ -9,6 +9,9 @@ const EMAILLISTS = (() => {
   const SITE = "evaasports.sharepoint.com,5c93dacd-279c-41bd-a4b0-64288b689f69,3c4714c8-a098-4f4b-bdd9-ad7a69c13740";
   const REGISTRY = "adbb503e-16ce-4c33-915e-fe46798ad8ec";   // EmailListRegistry
   const OVERRIDES = "12d30059-845a-47df-9c32-3a8501eb4ae9";  // EmailListOverrides
+  const TEAMCAT = "6ee018fd-c2b6-42a4-add0-3910452b690d";    // TeamCatalog (SE Programs teams + counts)
+  const REGCAT  = "3e3ed978-37e0-4d72-b1e1-bcced6892ce2";    // RegistrationCatalog (available registrations + counts)
+  let _lastRegs = [];   // scoped lists from the last load(), reused by the composer
   // Power Automate flow SAS URL that fires the GitHub sync on edits (true ~5-min apply).
   // Empty string = edits apply at the nightly sync instead. Set this once the flow exists.
   const TRIGGER_URL = "";
@@ -62,6 +65,153 @@ const EMAILLISTS = (() => {
 
   function root() { return document.getElementById("emaillists-view"); }
 
+  // --- SportsEngine-sourced list creation (opt-in): per-registration, per-team, coaches ---
+  // Promise<boolean> confirm dialog reusing the shared #confirm-modal DOM (app.js owns the markup).
+  function confirmModal({ title = "Email Admin Portal asks…", body, okLabel = "OK", okClass = "btn-primary" }) {
+    return new Promise((resolve) => {
+      const modal = document.getElementById("confirm-modal");
+      if (!modal) { resolve(window.confirm(String(body).replace(/<[^>]+>/g, ""))); return; }
+      document.getElementById("confirm-modal-title").textContent = title;
+      document.getElementById("confirm-modal-body").innerHTML = body;
+      const ok = document.getElementById("confirm-modal-ok"), cancel = document.getElementById("confirm-modal-cancel");
+      ok.textContent = okLabel; ok.className = okClass; modal.classList.remove("hidden");
+      const cleanup = (r) => { modal.classList.add("hidden"); ok.removeEventListener("click", onOk); cancel.removeEventListener("click", onCancel); document.removeEventListener("keydown", onKey); resolve(r); };
+      const onOk = () => cleanup(true), onCancel = () => cleanup(false), onKey = (e) => { if (e.key === "Escape") cleanup(false); else if (e.key === "Enter") cleanup(true); };
+      ok.addEventListener("click", onOk); cancel.addEventListener("click", onCancel); document.addEventListener("keydown", onKey);
+    });
+  }
+
+  async function getCatalogRows(listId) {
+    const r = await _g(`/sites/${SITE}/lists/${listId}/items?$expand=fields&$top=999`);
+    return (r.value || []).map((i) => i.fields);
+  }
+  // Catalogs scoped to the director's sport (admins see all), matched on BoardGroup like the registry.
+  async function getScopedCatalogs() {
+    const isAdmin = await GRAPH.isPortalAdmin();
+    let owned = null;
+    if (!isAdmin) {
+      const me = await GRAPH.getMe();
+      const gs = await GRAPH.getUserOwnedGroups(me.id);
+      owned = new Set(gs.map((g) => (g.mail || "").toLowerCase()).filter(Boolean));
+    }
+    const inScope = (f) => isAdmin || owned.has((f.BoardGroup || "").toLowerCase());
+    // Exclude items that already have a (non-deleted) list so directors can't create duplicates.
+    const existing = new Set((await getRegistry()).map((x) => String(x.f.RegistrationId || "")));
+    const teams = (await getCatalogRows(TEAMCAT)).filter(inScope).filter((t) => !existing.has("team-fam-" + t.TeamId));
+    const regs = (await getCatalogRows(REGCAT)).filter(inScope).filter((r) => !existing.has(String(r.RegistrationId)));
+    return { teams, regs, existing };
+  }
+
+  // Naming mirrors Sync-EmailLists.ps1 Get-Naming for registration lists; team/coach list
+  // addresses are authoritative here (the sync builds team rows at exactly this Title).
+  function regFamAddress(sport, regName) {
+    const s = String(sport || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const year = (String(regName).match(/\b(20\d\d)\b/) || [])[1];
+    const season = (String(regName).match(/spring|summer|fall|winter/i) || [""])[0].toLowerCase();
+    const domain = /softball|fusion/i.test(regName) ? "avfusion.org" : "evaasports.org";
+    return (s && year && season) ? `${s}-${year}-${season}-families@${domain}` : null;
+  }
+  const teamFamAddress = (sport, teamName) => slug(`${sport}-${teamName}`) + "-fam@evaasports.org";
+  const coachesAddress = (sport) => slug(sport) + "-coaches@evaasports.org";
+
+  async function createListRow(fields) {
+    await _g(`/sites/${SITE}/lists/${REGISTRY}/items`, { method: "POST", body: JSON.stringify({ fields }) });
+  }
+
+  async function openSeCreate() {
+    root().innerHTML = `<div class="card"><button class="btn-link back-link" id="sc-back">← Back to lists</button><p class="loading">Loading SportsEngine teams & registrations…</p></div>`;
+    document.getElementById("sc-back").addEventListener("click", load);
+    try { renderSeCreate(await getScopedCatalogs()); }
+    catch (e) { root().querySelector(".loading").textContent = "Couldn't load: " + e.message; }
+  }
+
+  function renderSeCreate(cat) {
+    root().innerHTML = `<div class="card">
+      <button class="btn-link back-link" id="sc-back">← Back to lists</button>
+      <h2>Create lists from SportsEngine</h2>
+      <p class="muted">Pick a source, choose what you want, and check the counts against your registration report. New lists are hidden from the address book and send-locked to your board; they build at the next sync.</p>
+      <div class="toolbar" style="gap:8px;margin-bottom:12px">
+        <button class="btn-secondary" id="sc-src-reg">By registration</button>
+        <button class="btn-secondary" id="sc-src-team">By team &amp; season</button>
+      </div>
+      <div id="sc-body"></div>
+      <div style="margin-top:14px"><button class="btn-primary" id="sc-create">Create selected…</button></div>
+    </div>`;
+    document.getElementById("sc-back").addEventListener("click", load);
+    const body = document.getElementById("sc-body");
+    let mode = "reg";
+
+    const renderReg = () => {
+      if (!cat.regs.length) { body.innerHTML = `<p class="muted">No registrations available for your sport.</p>`; return; }
+      const rows = cat.regs.slice().sort((a, b) => String(b.RegCreated || "").localeCompare(String(a.RegCreated || "")));
+      body.innerHTML = `<p class="muted">One family list per registration (all guardian emails). "Registrants" should match your registration report.</p>
+        <table class="data-table"><thead><tr><th></th><th>Registration</th><th>Registrants</th></tr></thead><tbody>${rows.map((r) => `
+          <tr><td style="width:28px"><input type="checkbox" class="sc-reg" data-id="${esc(r.RegistrationId)}" data-name="${esc(r.RegName)}" data-sport="${esc(r.Sport)}" data-board="${esc(r.BoardGroup)}" data-count="${esc(r.RegistrantCount)}"></td>
+          <td>${esc(r.RegName)}</td><td>${esc(r.RegistrantCount)}</td></tr>`).join("")}</tbody></table>`;
+    };
+    const renderTeam = () => {
+      if (!cat.teams.length) { body.innerHTML = `<p class="muted">No team/season data for your sport (only sports that use SportsEngine teams show here).</p>`; return; }
+      const t0 = cat.teams[0];
+      const byDiv = {};
+      cat.teams.forEach((t) => { (byDiv[t.Division || "(teams)"] = byDiv[t.Division || "(teams)"] || []).push(t); });
+      const coachExists = cat.existing && cat.existing.has("team-coach-" + t0.ProgramId);
+      let html = `<p class="muted">A family list per team, and/or one coaches list for the whole program (${esc(t0.ProgramName)}).</p>`
+        + (coachExists
+            ? `<p class="muted" style="margin:6px 0 12px">✓ Coaches list already created.</p>`
+            : `<label style="display:block;margin:6px 0 12px"><input type="checkbox" id="sc-coaches" data-sport="${esc(t0.Sport)}" data-board="${esc(t0.BoardGroup)}" data-prog="${esc(t0.ProgramId)}"> <strong>Coaches list</strong> — all ${esc(t0.Sport)} coaches</label>`);
+      Object.keys(byDiv).sort().forEach((div) => {
+        html += `<div style="margin:10px 0 4px;font-weight:600">${esc(div)}</div><table class="data-table"><tbody>${byDiv[div].map((t) => `
+          <tr><td style="width:28px"><input type="checkbox" class="sc-team" data-id="${esc(t.TeamId)}" data-name="${esc(t.TeamName)}" data-sport="${esc(t.Sport)}" data-board="${esc(t.BoardGroup)}" data-count="${esc(t.GuardianEmailCount)}"></td>
+          <td>${esc(t.TeamName)}</td><td class="muted">${esc(t.PlayerCount)} players · ${esc(t.GuardianEmailCount)} families · ${esc(t.CoachCount)} coaches</td></tr>`).join("")}</tbody></table>`;
+      });
+      body.innerHTML = html;
+    };
+    const setMode = (m) => {
+      mode = m;
+      document.getElementById("sc-src-reg").className = m === "reg" ? "btn-primary" : "btn-secondary";
+      document.getElementById("sc-src-team").className = m === "team" ? "btn-primary" : "btn-secondary";
+      (m === "reg" ? renderReg : renderTeam)();
+    };
+    document.getElementById("sc-src-reg").addEventListener("click", () => setMode("reg"));
+    document.getElementById("sc-src-team").addEventListener("click", () => setMode("team"));
+    setMode("reg");
+
+    document.getElementById("sc-create").addEventListener("click", async () => {
+      const picks = [];
+      if (mode === "reg") {
+        document.querySelectorAll(".sc-reg:checked").forEach((cb) => {
+          const d = cb.dataset; const addr = regFamAddress(d.sport, d.name);
+          picks.push({ title: addr || (slug(`${d.sport}-${d.name}`) + "-families@evaasports.org"), regId: d.id, sport: d.sport, board: d.board, source: "Registration", label: d.name, count: +d.count || 0 });
+        });
+      } else {
+        const coach = document.getElementById("sc-coaches");
+        if (coach && coach.checked) picks.push({ title: coachesAddress(coach.dataset.sport), regId: "team-coach-" + coach.dataset.prog, sport: coach.dataset.sport, board: coach.dataset.board, source: "Team", label: `All ${coach.dataset.sport} coaches`, count: null });
+        document.querySelectorAll(".sc-team:checked").forEach((cb) => {
+          const d = cb.dataset;
+          picks.push({ title: teamFamAddress(d.sport, d.name), regId: "team-fam-" + d.id, sport: d.sport, board: d.board, source: "Team", label: `${d.name} (families)`, count: +d.count || 0 });
+        });
+      }
+      if (!picks.length) { alert("Select at least one item to create."); return; }
+      const total = picks.reduce((s, p) => s + (p.count || 0), 0);
+      const lines = picks.map((p) => `<li>${esc(p.label)} → <code>${esc(p.title)}</code>${p.count != null ? ` <span class="muted">(~${p.count})</span>` : ""}</li>`).join("");
+      const ok = await confirmModal({
+        title: `Create ${picks.length} list${picks.length > 1 ? "s" : ""}?`,
+        okLabel: "Create",
+        body: `<p>These will be created now and <strong>built at the next nightly sync</strong> (ready by tomorrow morning). Larger lists take longer to build.</p>
+               <ul style="max-height:240px;overflow:auto">${lines}</ul>
+               ${total ? `<p><strong>~${total}</strong> recipients total — please confirm this lines up with your registration report.</p>` : ""}
+               <p class="muted">Each list is hidden from the global address book; only your board can send to it.</p>`
+      });
+      if (!ok) return;
+      try {
+        for (const p of picks) await createListRow({ Title: p.title, RegistrationId: p.regId, Sport: p.sport, BoardGroup: p.board, Source: p.source, Status: "Active", RecipientCount: 0 });
+        triggerSync();
+        toast(`Queued ${picks.length} list${picks.length > 1 ? "s" : ""} — building at the next sync.`);
+        load();
+      } catch (e) { alert("Failed to create: " + e.message); }
+    });
+  }
+
   async function load() {
     root().innerHTML = `<div class="card"><p class="loading">Loading email lists…</p></div>`;
     try {
@@ -74,6 +224,7 @@ const EMAILLISTS = (() => {
         const ownedMails = new Set(owned.map((g) => (g.mail || "").toLowerCase()).filter(Boolean));
         regs = regs.filter((x) => ownedMails.has((x.f.BoardGroup || "").toLowerCase()));
       }
+      _lastRegs = regs;
       renderList(regs);
     }
     catch (e) { root().innerHTML = `<div class="card error-card"><h2>Couldn't load</h2><p>${esc(e.message)}</p></div>`; }
@@ -100,7 +251,11 @@ const EMAILLISTS = (() => {
     const createUI = `
       <div class="section-header" style="align-items:center">
         <h2>Email Lists</h2>
-        <button class="btn-secondary" id="el-create-btn">+ Create custom list</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn-secondary" id="el-send-btn">✉ Send to lists</button>
+          <button class="btn-secondary" id="el-se-btn">+ Create from SportsEngine</button>
+          <button class="btn-secondary" id="el-create-btn">+ Create custom list</button>
+        </div>
       </div>
       <div id="el-create-form" class="hidden" style="margin:0 0 14px;padding:12px;background:#f4f6f9;border-radius:8px">
         <div class="toolbar" style="flex-wrap:wrap;gap:8px">
@@ -119,6 +274,8 @@ const EMAILLISTS = (() => {
     root().innerHTML = `<div class="card">${createUI}${body}</div>`;
     root().querySelectorAll("tr[data-reg]").forEach((r) => r.addEventListener("click", () => openDetail(r.dataset.reg, r.dataset.mail, r.dataset.itemid, r.dataset.expires)));
 
+    document.getElementById("el-send-btn").addEventListener("click", openCompose);
+    document.getElementById("el-se-btn").addEventListener("click", openSeCreate);
     document.getElementById("el-create-btn").addEventListener("click", async () => {
       const form = document.getElementById("el-create-form");
       form.classList.toggle("hidden");
@@ -215,6 +372,78 @@ const EMAILLISTS = (() => {
         load();
       } catch (e) { alert("Failed to queue deletion: " + e.message); }
     });
+  }
+
+  // --- compose & send to one or more of the director's lists (BCC; sends as the director) ---
+  const EXO_DAILY = 10000;   // EXO recipient-rate limit per mailbox per day (approx)
+  function wrapBranded(bodyText) {
+    const safe = esc(bodyText).replace(/\n/g, "<br>");
+    return `<div style="font-family:Arial,sans-serif;font-size:14px;color:#222;max-width:640px;line-height:1.6">
+      <div style="background:#1B4F8C;color:#fff;padding:12px 18px;font-weight:600;border-radius:6px 6px 0 0">Eastview Athletic Association</div>
+      <div style="border:1px solid #e3e8ef;border-top:none;padding:18px;border-radius:0 0 6px 6px">${safe}</div>
+    </div>`;
+  }
+
+  function openCompose() {
+    const lists = _lastRegs.filter((x) => (x.f.Status || "") !== "Deleted" && x.f.Title);
+    if (!lists.length) { alert("You have no lists to send to yet."); return; }
+    root().innerHTML = `<div class="card">
+      <button class="btn-link back-link" id="cm-back">← Back to lists</button>
+      <h2>Send to lists</h2>
+      <p class="muted">Pick one or more of your lists and write your message. Recipients go in <strong>BCC</strong> — they can't see each other or reply-all. The email is sent from your address and saved to your Sent Items.</p>
+      <div style="margin:10px 0">
+        ${lists.map((x) => `<label style="display:block;margin:4px 0"><input type="checkbox" class="cm-list" data-mail="${esc(x.f.Title)}" data-count="${esc(x.f.RecipientCount || 0)}"> ${esc(x.f.Title)} <span class="muted">· ${esc(x.f.RecipientCount || 0)} recipients</span></label>`).join("")}
+      </div>
+      <div class="muted" id="cm-total" style="margin:6px 0">Selected: 0 lists · ~0 recipients</div>
+      <div class="toolbar" style="flex-direction:column;align-items:stretch;gap:8px;max-width:640px">
+        <input type="text" id="cm-subject" placeholder="Subject" style="padding:8px" />
+        <textarea id="cm-body" placeholder="Write your message…" rows="10" style="padding:8px;font-family:inherit"></textarea>
+      </div>
+      <div style="margin-top:12px"><button class="btn-primary" id="cm-send">Send…</button></div>
+    </div>`;
+    document.getElementById("cm-back").addEventListener("click", load);
+    const updateTotal = () => {
+      const sel = [...document.querySelectorAll(".cm-list:checked")];
+      const total = sel.reduce((s, cb) => s + (+cb.dataset.count || 0), 0);
+      document.getElementById("cm-total").textContent = `Selected: ${sel.length} list${sel.length === 1 ? "" : "s"} · ~${total} recipients`;
+    };
+    document.querySelectorAll(".cm-list").forEach((cb) => cb.addEventListener("change", updateTotal));
+    document.getElementById("cm-send").addEventListener("click", onSend);
+  }
+
+  async function onSend() {
+    const selected = [...document.querySelectorAll(".cm-list:checked")].map((cb) => ({ mail: cb.dataset.mail, count: +cb.dataset.count || 0 }));
+    const subject = (document.getElementById("cm-subject").value || "").trim();
+    const bodyText = (document.getElementById("cm-body").value || "").trim();
+    if (!selected.length) { alert("Select at least one list to send to."); return; }
+    if (!subject) { alert("Enter a subject."); return; }
+    if (!bodyText) { alert("Enter a message."); return; }
+    const total = selected.reduce((s, x) => s + x.count, 0);
+    const lines = selected.map((s) => `<li><code>${esc(s.mail)}</code> <span class="muted">(~${s.count})</span></li>`).join("");
+    let warn = "";
+    if (total > 9000) warn = `<p style="background:#fdecea;border:1px solid #f5c2c0;padding:8px;border-radius:6px">⚠ This single send (~${total}) would consume nearly your whole ~${EXO_DAILY}/day Microsoft sending limit. Consider sending to fewer lists at a time.</p>`;
+    else if (total >= 5000) warn = `<p style="background:#fff7e6;border:1px solid #ffe1a8;padding:8px;border-radius:6px">This expands to ~${total} individual deliveries, which count toward your ~${EXO_DAILY}/day Microsoft limit. If you've sent large batches today, consider splitting across days.</p>`;
+    const ok = await confirmModal({
+      title: `Send to ${selected.length} list${selected.length > 1 ? "s" : ""}?`,
+      okLabel: "Send now",
+      body: `<p>You're about to email <strong>~${total}</strong> recipients (BCC) across:</p>
+             <ul style="max-height:220px;overflow:auto">${lines}</ul>
+             ${warn}
+             <p class="muted">People on more than one list are de-duplicated by Exchange, so the real number may be a little lower. Subject: <em>${esc(subject)}</em></p>`
+    });
+    if (!ok) return;
+    let myAddr = "";
+    try {
+      const me = await GRAPH.getMe();
+      myAddr = me.mail || me.userPrincipalName;
+      await GRAPH.sendMail([myAddr], subject, wrapBranded(bodyText), { bcc: selected.map((s) => s.mail), saveToSentItems: true });
+      GRAPH.logAuditEntry({ actor: myAddr, action: "emaillist send message", targetGroup: selected.map((s) => s.mail).join(", "), result: "Success", notes: JSON.stringify({ subject, lists: selected.map((s) => s.mail), estRecipients: total, via: "bcc" }) });
+      toast(`Sent to ${selected.length} list${selected.length > 1 ? "s" : ""} (~${total} recipients).`);
+      load();
+    } catch (e) {
+      try { GRAPH.logAuditEntry({ actor: myAddr, action: "emaillist send message", targetGroup: selected.map((s) => s.mail).join(", "), result: "Failure", errorDetail: e.message, notes: JSON.stringify({ subject }) }); } catch (_) { /* non-fatal */ }
+      alert("Send failed: " + e.message);
+    }
   }
 
   return { load };

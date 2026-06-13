@@ -253,6 +253,9 @@ const GRAPH = (() => {
     if (opts.cc && opts.cc.length) {
       body.message.ccRecipients = opts.cc.map((addr) => ({ emailAddress: { address: addr } }));
     }
+    if (opts.bcc && opts.bcc.length) {
+      body.message.bccRecipients = opts.bcc.map((addr) => ({ emailAddress: { address: addr } }));
+    }
     return callGraph(`/me/sendMail`, {
       method: "POST",
       body: JSON.stringify(body),
