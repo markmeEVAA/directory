@@ -286,6 +286,11 @@ const EMAILLISTS = (() => {
     return "reg";
   }
 
+  // Category buckets, shared by the list table and the send composer.
+  const LIST_KINDS = ["reg", "teams", "coaches", "custom"];
+  const LIST_KIND_LABEL = { reg: "Registration family lists", teams: "Team family lists", coaches: "Coaches lists", custom: "Custom lists" };
+  const divisionOf = (f) => [f.Gender, f.AgeGroup].filter((v) => v && v !== "All").join(" ");
+
   function renderList(regs) {
     const createUI = `
       <div class="section-header" style="align-items:center">
@@ -306,14 +311,21 @@ const EMAILLISTS = (() => {
         <p class="muted" style="margin:6px 0 0">A custom list isn't tied to any registration — you manage every recipient by hand. The group you pick is who's allowed to send to it. Add people after it's created.</p>
       </div>`;
     const filterBar = filterControls(regs, "el-f");
+    const groupedRegs = {};
+    regs.forEach((x) => { const k = listKind(x.f); (groupedRegs[k] = groupedRegs[k] || []).push(x); });
+    const rowFor = (x) => { const f = x.f;
+      const type = (String(f.RegistrationId || "").startsWith("manual-")) ? "custom" : (f.Category || f.Sport || "");
+      return `<tr data-reg="${esc(f.RegistrationId)}" data-mail="${esc(f.Title)}" data-itemid="${esc(x.id)}" data-expires="${esc((f.ExpiresOn || "").slice(0, 10))}" data-catgroup="${listKind(f)}" data-cat="${esc(f.Category || "")}" data-gender="${esc(f.Gender || "")}" data-age="${esc(f.AgeGroup || "")}" data-text="${esc(String(f.Title || "").toLowerCase())}" style="cursor:pointer"><td>${esc(f.Title)}</td><td>${esc(type)}</td><td>${esc(divisionOf(f))}</td><td>${esc(f.RecipientCount)}</td><td>${esc((f.ExpiresOn || "").slice(0, 10) || "—")}</td></tr>`;
+    };
+    const tableBody = LIST_KINDS.filter((k) => groupedRegs[k] && groupedRegs[k].length).map((k) => {
+      const items = groupedRegs[k].slice().sort((a, b) => String(a.f.Title).localeCompare(String(b.f.Title)));
+      return `<tr class="el-cat-head" data-catgroup="${k}"><td colspan="5">${esc(LIST_KIND_LABEL[k])} <span class="muted">(${items.length})</span></td></tr>` + items.map(rowFor).join("");
+    }).join("");
     const body = regs.length
       ? `<p class="muted">Auto lists are built from registrations (Guardian 1 + 2) and SportsEngine teams; custom lists you manage by hand. Click a list to view recipients, add/remove people, shorten expiry, or delete it.</p>
          ${filterBar}
          <table class="data-table"><thead><tr><th>List address</th><th>Type</th><th>Division</th><th>Recipients</th><th>Expires</th></tr></thead>
-         <tbody>${regs.map((x) => { const f = x.f;
-            const type = (String(f.RegistrationId || "").startsWith("manual-")) ? "custom" : (f.Category || f.Sport || "");
-            const divLabel = [f.Gender, f.AgeGroup].filter((v) => v && v !== "All").join(" ");
-            return `<tr data-reg="${esc(f.RegistrationId)}" data-mail="${esc(f.Title)}" data-itemid="${esc(x.id)}" data-expires="${esc((f.ExpiresOn || "").slice(0, 10))}" data-cat="${esc(f.Category || "")}" data-gender="${esc(f.Gender || "")}" data-age="${esc(f.AgeGroup || "")}" data-text="${esc(String(f.Title || "").toLowerCase())}" style="cursor:pointer"><td>${esc(f.Title)}</td><td>${esc(type)}</td><td>${esc(divLabel)}</td><td>${esc(f.RecipientCount)}</td><td>${esc((f.ExpiresOn || "").slice(0, 10) || "—")}</td></tr>`; }).join("")}</tbody></table>`
+         <tbody>${tableBody}</tbody></table>`
       : `<p class="muted">No lists yet. Auto lists are built nightly from SportsEngine registrations + teams — or create a custom one above.</p>`;
     root().innerHTML = `<div class="card">${createUI}${body}</div>`;
     root().querySelectorAll("tr[data-reg]").forEach((r) => r.addEventListener("click", () => openDetail(r.dataset.reg, r.dataset.mail, r.dataset.itemid, r.dataset.expires)));
@@ -323,6 +335,11 @@ const EMAILLISTS = (() => {
       root().querySelectorAll("tr[data-reg]").forEach((r) => {
         const ok = (!c || r.dataset.cat === c) && (!g || r.dataset.gender === g) && (!a || r.dataset.age === a) && (!t || (r.dataset.text || "").includes(t));
         r.style.display = ok ? "" : "none";
+      });
+      // collapse a category header when all its rows are filtered out
+      root().querySelectorAll("tr.el-cat-head").forEach((h) => {
+        const any = [...root().querySelectorAll(`tr[data-reg][data-catgroup="${h.dataset.catgroup}"]`)].some((r) => r.style.display !== "none");
+        h.style.display = any ? "" : "none";
       });
     });
 
@@ -521,51 +538,62 @@ const EMAILLISTS = (() => {
     if (!lists.length) { alert("You have no lists to send to yet."); return; }
 
     // Bucket the lists so a sport with dozens of team lists stays scannable.
-    const KIND_ORDER = ["reg", "teams", "coaches", "custom"];
-    const KIND_LABEL = { reg: "Registration family lists", teams: "Team family lists", coaches: "Coaches lists", custom: "Custom lists" };
     const groups = {};
     lists.forEach((x) => { const k = listKind(x.f); (groups[k] = groups[k] || []).push(x); });
-    const groupHtml = KIND_ORDER.filter((k) => groups[k] && groups[k].length).map((k) => {
+    const rowFor = (x, k) => { const f = x.f; const div = divisionOf(f);
+      return `<label class="cm-row" style="display:block;margin:3px 0" data-cat="${esc(f.Category || "")}" data-gender="${esc(f.Gender || "")}" data-age="${esc(f.AgeGroup || "")}" data-text="${esc(String(f.Title || "").toLowerCase())}" data-group="${k}">
+          <input type="checkbox" class="cm-list" data-mail="${esc(f.Title)}" data-count="${esc(f.RecipientCount || 0)}" data-group="${k}"> ${esc(f.Title)}${div ? ` <span class="muted">· ${esc(div)}</span>` : ""} <span class="muted">· ${esc(f.RecipientCount || 0)} recipients</span>
+        </label>`;
+    };
+    const groupHtml = LIST_KINDS.filter((k) => groups[k] && groups[k].length).map((k) => {
       const items = groups[k].slice().sort((a, b) => String(a.f.Title).localeCompare(String(b.f.Title)));
-      const rows = items.map((x) => {
-        const f = x.f;
-        const div = [f.Gender, f.AgeGroup].filter((v) => v && v !== "All").join(" ");
-        return `<label class="cm-row" style="display:block;margin:3px 0" data-cat="${esc(f.Category || "")}" data-gender="${esc(f.Gender || "")}" data-age="${esc(f.AgeGroup || "")}" data-text="${esc(String(f.Title || "").toLowerCase())}" data-group="${k}">
-            <input type="checkbox" class="cm-list" data-mail="${esc(f.Title)}" data-count="${esc(f.RecipientCount || 0)}" data-group="${k}"> ${esc(f.Title)}${div ? ` <span class="muted">· ${esc(div)}</span>` : ""} <span class="muted">· ${esc(f.RecipientCount || 0)} recipients</span>
-          </label>`;
-      }).join("");
+      let inner;
+      if (k === "teams") {
+        // second-level grouping by division (Gender + Age) so big team buckets stay scannable
+        const byDiv = {};
+        items.forEach((x) => { const d = divisionOf(x.f) || "Other"; (byDiv[d] = byDiv[d] || []).push(x); });
+        inner = Object.keys(byDiv).sort().map((d) =>
+          `<div class="cm-subgroup"><div class="cm-subhead">${esc(d)} <span class="muted">(${byDiv[d].length})</span></div>${byDiv[d].map((x) => rowFor(x, k)).join("")}</div>`
+        ).join("");
+      } else {
+        inner = items.map((x) => rowFor(x, k)).join("");
+      }
       return `<div class="cm-group" data-group="${k}" style="margin:10px 0">
-          <label class="cm-group-head" style="display:block;font-weight:600;border-bottom:1px solid #e3e8ef;padding-bottom:3px"><input type="checkbox" class="cm-group-all" data-group="${k}"> ${esc(KIND_LABEL[k])} <span class="muted">(${items.length})</span></label>
-          <div class="cm-group-items" style="margin:4px 0 0 6px">${rows}</div>
+          <label class="cm-group-head" style="display:block;font-weight:600;border-bottom:1px solid #e3e8ef;padding-bottom:3px"><input type="checkbox" class="cm-group-all" data-group="${k}"> ${esc(LIST_KIND_LABEL[k])} <span class="muted">(${items.length})</span></label>
+          <div class="cm-group-items" style="margin:4px 0 0 6px">${inner}</div>
         </div>`;
     }).join("");
 
     root().innerHTML = `<div class="card">
       <button class="btn-link back-link" id="cm-back">← Back to lists</button>
       <h2>Send to lists</h2>
-      <p class="muted">Pick one or more of your lists and write your message. Recipients go in <strong>BCC</strong> — they can't see each other or reply-all. The email is sent from your address and saved to your Sent Items.</p>
-      ${filterControls(lists, "cm-f")}
-      <label style="display:block;margin:8px 0 4px;font-weight:600"><input type="checkbox" id="cm-all"> Select all shown</label>
-      <div id="cm-groups" style="margin:4px 0 10px">${groupHtml}</div>
-      <div class="muted" id="cm-total" style="margin:6px 0">Selected: 0 lists · ~0 recipients</div>
-      <div class="toolbar" style="flex-direction:column;align-items:stretch;gap:8px;max-width:640px">
-        <input type="text" id="cm-subject" placeholder="Subject" style="padding:8px" />
-        <div class="cm-editor-wrap">
-          <div class="cm-toolbar" id="cm-toolbar" role="toolbar" aria-label="Formatting">
-            <button type="button" class="cm-tb-btn" data-cmd="bold" title="Bold (Ctrl+B)"><b>B</b></button>
-            <button type="button" class="cm-tb-btn" data-cmd="italic" title="Italic (Ctrl+I)"><i>I</i></button>
-            <button type="button" class="cm-tb-btn" data-cmd="underline" title="Underline (Ctrl+U)"><u>U</u></button>
-            <span class="cm-tb-sep"></span>
-            <button type="button" class="cm-tb-btn" data-cmd="insertUnorderedList" title="Bulleted list">• List</button>
-            <button type="button" class="cm-tb-btn" data-cmd="insertOrderedList" title="Numbered list">1. List</button>
-            <span class="cm-tb-sep"></span>
-            <button type="button" class="cm-tb-btn" data-cmd="createLink" title="Insert link">🔗 Link</button>
-            <button type="button" class="cm-tb-btn" data-cmd="removeFormat" title="Clear formatting">⨯ Clear</button>
+      <p class="muted">Pick your lists on the left, write your message on the right. Recipients go in <strong>BCC</strong> — they can't see each other or reply-all. The email is sent from your address and saved to your Sent Items.</p>
+      <div class="cm-cols">
+        <div class="cm-left">
+          ${filterControls(lists, "cm-f")}
+          <label style="display:block;margin:4px 0 6px;font-weight:600"><input type="checkbox" id="cm-all"> Select all shown</label>
+          <div id="cm-groups">${groupHtml}</div>
+          <div class="muted cm-total-bar" id="cm-total">Selected: 0 lists · ~0 recipients</div>
+        </div>
+        <div class="cm-right">
+          <input type="text" id="cm-subject" placeholder="Subject" style="padding:8px;width:100%" />
+          <div class="cm-editor-wrap" style="margin-top:8px">
+            <div class="cm-toolbar" id="cm-toolbar" role="toolbar" aria-label="Formatting">
+              <button type="button" class="cm-tb-btn" data-cmd="bold" title="Bold (Ctrl+B)"><b>B</b></button>
+              <button type="button" class="cm-tb-btn" data-cmd="italic" title="Italic (Ctrl+I)"><i>I</i></button>
+              <button type="button" class="cm-tb-btn" data-cmd="underline" title="Underline (Ctrl+U)"><u>U</u></button>
+              <span class="cm-tb-sep"></span>
+              <button type="button" class="cm-tb-btn" data-cmd="insertUnorderedList" title="Bulleted list">• List</button>
+              <button type="button" class="cm-tb-btn" data-cmd="insertOrderedList" title="Numbered list">1. List</button>
+              <span class="cm-tb-sep"></span>
+              <button type="button" class="cm-tb-btn" data-cmd="createLink" title="Insert link">🔗 Link</button>
+              <button type="button" class="cm-tb-btn" data-cmd="removeFormat" title="Clear formatting">⨯ Clear</button>
+            </div>
+            <div id="cm-body" class="cm-body" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="Write your message…"></div>
           </div>
-          <div id="cm-body" class="cm-body" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="Write your message…"></div>
+          <div style="margin-top:12px"><button class="btn-primary" id="cm-send">Send…</button></div>
         </div>
       </div>
-      <div style="margin-top:12px"><button class="btn-primary" id="cm-send">Send…</button></div>
     </div>`;
     document.getElementById("cm-back").addEventListener("click", load);
 
@@ -603,6 +631,10 @@ const EMAILLISTS = (() => {
       document.querySelectorAll(".cm-row").forEach((r) => {
         const ok = (!c || r.dataset.cat === c) && (!g || r.dataset.gender === g) && (!a || r.dataset.age === a) && (!t || (r.dataset.text || "").includes(t));
         r.style.display = ok ? "block" : "none";   // .cm-row is a <label> (default inline) — must restore block, not ""
+      });
+      document.querySelectorAll(".cm-subgroup").forEach((sg) => {   // team Gender/Age sub-headers
+        const any = [...sg.querySelectorAll(".cm-row")].some((r) => r.style.display !== "none");
+        sg.style.display = any ? "" : "none";
       });
       document.querySelectorAll(".cm-group").forEach((grp) => {
         const any = [...grp.querySelectorAll(".cm-row")].some((r) => r.style.display !== "none");

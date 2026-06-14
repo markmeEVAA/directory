@@ -1022,3 +1022,15 @@ body.viewmode-owner .help-owner { display: block; }
 .cm-body:focus { outline: none; border-color: #1B4F8C; box-shadow: 0 0 0 2px rgba(27,79,140,0.15); }
 .cm-body:empty::before { content: attr(data-placeholder); color: #999; pointer-events: none; }
 .cm-body a { color: #1B4F8C; }
+
+/* Two-column Send composer: lists left, message right */
+.cm-cols { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+.cm-left  { flex: 1 1 300px; min-width: 280px; max-height: 62vh; overflow-y: auto; padding-right: 4px; }
+.cm-right { flex: 1 1 360px; min-width: 300px; }
+.cm-total-bar { margin: 8px 0 0; position: sticky; bottom: 0; background: #fff; padding-top: 6px; border-top: 1px solid #eef1f6; font-weight: 600; }
+.cm-subgroup { margin: 4px 0 6px; }
+.cm-subhead { font-size: 12px; font-weight: 600; color: #5a6b85; text-transform: uppercase; letter-spacing: .03em; margin: 6px 0 2px; }
+@media (max-width: 760px) { .cm-left { max-height: none; } }
+
+/* Category section headers in the Email Lists table */
+.data-table tr.el-cat-head td { background: #eef2f7; color: #1B4F8C; font-weight: 600; cursor: default; }
