@@ -509,7 +509,7 @@ const EMAILLISTS = (() => {
     wireFilters("cm-f", (c, g, a, t) => {
       document.querySelectorAll(".cm-row").forEach((r) => {
         const ok = (!c || r.dataset.cat === c) && (!g || r.dataset.gender === g) && (!a || r.dataset.age === a) && (!t || (r.dataset.text || "").includes(t));
-        r.style.display = ok ? "" : "none";
+        r.style.display = ok ? "block" : "none";   // .cm-row is a <label> (default inline) — must restore block, not ""
       });
       document.querySelectorAll(".cm-group").forEach((grp) => {
         const any = [...grp.querySelectorAll(".cm-row")].some((r) => r.style.display !== "none");
