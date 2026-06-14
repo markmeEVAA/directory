@@ -252,6 +252,40 @@ const EMAILLISTS = (() => {
     return smtp;
   }
 
+  function distinctVals(regs, sel) {
+    return [...new Set(regs.map((x) => x.f[sel]).filter((v) => v && v !== "All"))].sort();
+  }
+  // Shared Type/Gender/Age/text filter bar — used by both the list screen and the send composer.
+  function filterControls(regs, prefix) {
+    const optList = (label, vals) => `<option value="">${label}</option>` + vals.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join("");
+    const cats = distinctVals(regs, "Category"), genders = distinctVals(regs, "Gender"), ages = distinctVals(regs, "AgeGroup");
+    if (!(cats.length || genders.length || ages.length)) return "";
+    return `<div class="toolbar" style="gap:8px;margin:4px 0 10px;flex-wrap:wrap">
+        <select id="${prefix}-cat" style="padding:5px">${optList("All types", cats)}</select>
+        <select id="${prefix}-gender" style="padding:5px">${optList("All genders", genders)}</select>
+        <select id="${prefix}-age" style="padding:5px">${optList("All ages", ages)}</select>
+        <input type="search" id="${prefix}-text" placeholder="filter address…" style="min-width:180px;padding:5px" />
+      </div>`;
+  }
+  // Wire a filter bar built by filterControls; calls onApply(cat, gender, age, text) on every change.
+  // Returns the apply fn (or null if no bar was rendered) so callers can run it once up front.
+  function wireFilters(prefix, onApply) {
+    const el = (s) => document.getElementById(s);
+    if (!el(prefix + "-cat")) return null;
+    const run = () => onApply(el(prefix + "-cat").value, el(prefix + "-gender").value, el(prefix + "-age").value, (el(prefix + "-text").value || "").toLowerCase());
+    [prefix + "-cat", prefix + "-gender", prefix + "-age"].forEach((id) => el(id).addEventListener("change", run));
+    el(prefix + "-text").addEventListener("input", run);
+    return run;
+  }
+  // Which bucket a list belongs to (drives the grouped layout in the composer).
+  function listKind(f) {
+    const rid = String(f.RegistrationId || "");
+    if (rid.startsWith("team-coach-")) return "coaches";
+    if (rid.startsWith("team-fam-")) return "teams";
+    if (rid.startsWith("manual-")) return "custom";
+    return "reg";
+  }
+
   function renderList(regs) {
     const createUI = `
       <div class="section-header" style="align-items:center">
@@ -271,16 +305,7 @@ const EMAILLISTS = (() => {
         </div>
         <p class="muted" style="margin:6px 0 0">A custom list isn't tied to any registration — you manage every recipient by hand. The group you pick is who's allowed to send to it. Add people after it's created.</p>
       </div>`;
-    const distinct = (sel) => [...new Set(regs.map((x) => x.f[sel]).filter((v) => v && v !== "All"))].sort();
-    const optList = (label, vals) => `<option value="">${label}</option>` + vals.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join("");
-    const cats = distinct("Category"), genders = distinct("Gender"), ages = distinct("AgeGroup");
-    const filterBar = (cats.length || genders.length || ages.length)
-      ? `<div class="toolbar" style="gap:8px;margin:4px 0 10px;flex-wrap:wrap">
-           <select id="el-f-cat" style="padding:5px">${optList("All types", cats)}</select>
-           <select id="el-f-gender" style="padding:5px">${optList("All genders", genders)}</select>
-           <select id="el-f-age" style="padding:5px">${optList("All ages", ages)}</select>
-           <input type="search" id="el-f-text" placeholder="filter address…" style="min-width:180px;padding:5px" />
-         </div>` : "";
+    const filterBar = filterControls(regs, "el-f");
     const body = regs.length
       ? `<p class="muted">Auto lists are built from registrations (Guardian 1 + 2) and SportsEngine teams; custom lists you manage by hand. Click a list to view recipients, add/remove people, shorten expiry, or delete it.</p>
          ${filterBar}
@@ -294,18 +319,12 @@ const EMAILLISTS = (() => {
     root().querySelectorAll("tr[data-reg]").forEach((r) => r.addEventListener("click", () => openDetail(r.dataset.reg, r.dataset.mail, r.dataset.itemid, r.dataset.expires)));
 
     // Type / Gender / Age / text filters (boys vs girls, age groups, family vs coaches)
-    const elF = (id) => document.getElementById(id);
-    if (elF("el-f-cat")) {
-      const applyFilters = () => {
-        const c = elF("el-f-cat").value, g = elF("el-f-gender").value, a = elF("el-f-age").value, t = (elF("el-f-text").value || "").toLowerCase();
-        root().querySelectorAll("tr[data-reg]").forEach((r) => {
-          const ok = (!c || r.dataset.cat === c) && (!g || r.dataset.gender === g) && (!a || r.dataset.age === a) && (!t || (r.dataset.text || "").includes(t));
-          r.style.display = ok ? "" : "none";
-        });
-      };
-      ["el-f-cat", "el-f-gender", "el-f-age"].forEach((id) => elF(id).addEventListener("change", applyFilters));
-      elF("el-f-text").addEventListener("input", applyFilters);
-    }
+    wireFilters("el-f", (c, g, a, t) => {
+      root().querySelectorAll("tr[data-reg]").forEach((r) => {
+        const ok = (!c || r.dataset.cat === c) && (!g || r.dataset.gender === g) && (!a || r.dataset.age === a) && (!t || (r.dataset.text || "").includes(t));
+        r.style.display = ok ? "" : "none";
+      });
+    });
 
     document.getElementById("el-send-btn").addEventListener("click", openCompose);
     document.getElementById("el-se-btn").addEventListener("click", openSeCreate);
@@ -420,14 +439,34 @@ const EMAILLISTS = (() => {
   function openCompose() {
     const lists = _lastRegs.filter((x) => (x.f.Status || "") !== "Deleted" && x.f.Title);
     if (!lists.length) { alert("You have no lists to send to yet."); return; }
+
+    // Bucket the lists so a sport with dozens of team lists stays scannable.
+    const KIND_ORDER = ["reg", "teams", "coaches", "custom"];
+    const KIND_LABEL = { reg: "Registration family lists", teams: "Team family lists", coaches: "Coaches lists", custom: "Custom lists" };
+    const groups = {};
+    lists.forEach((x) => { const k = listKind(x.f); (groups[k] = groups[k] || []).push(x); });
+    const groupHtml = KIND_ORDER.filter((k) => groups[k] && groups[k].length).map((k) => {
+      const items = groups[k].slice().sort((a, b) => String(a.f.Title).localeCompare(String(b.f.Title)));
+      const rows = items.map((x) => {
+        const f = x.f;
+        const div = [f.Gender, f.AgeGroup].filter((v) => v && v !== "All").join(" ");
+        return `<label class="cm-row" style="display:block;margin:3px 0" data-cat="${esc(f.Category || "")}" data-gender="${esc(f.Gender || "")}" data-age="${esc(f.AgeGroup || "")}" data-text="${esc(String(f.Title || "").toLowerCase())}" data-group="${k}">
+            <input type="checkbox" class="cm-list" data-mail="${esc(f.Title)}" data-count="${esc(f.RecipientCount || 0)}" data-group="${k}"> ${esc(f.Title)}${div ? ` <span class="muted">· ${esc(div)}</span>` : ""} <span class="muted">· ${esc(f.RecipientCount || 0)} recipients</span>
+          </label>`;
+      }).join("");
+      return `<div class="cm-group" data-group="${k}" style="margin:10px 0">
+          <label class="cm-group-head" style="display:block;font-weight:600;border-bottom:1px solid #e3e8ef;padding-bottom:3px"><input type="checkbox" class="cm-group-all" data-group="${k}"> ${esc(KIND_LABEL[k])} <span class="muted">(${items.length})</span></label>
+          <div class="cm-group-items" style="margin:4px 0 0 6px">${rows}</div>
+        </div>`;
+    }).join("");
+
     root().innerHTML = `<div class="card">
       <button class="btn-link back-link" id="cm-back">← Back to lists</button>
       <h2>Send to lists</h2>
       <p class="muted">Pick one or more of your lists and write your message. Recipients go in <strong>BCC</strong> — they can't see each other or reply-all. The email is sent from your address and saved to your Sent Items.</p>
-      <label style="display:block;margin:8px 0 4px;font-weight:600"><input type="checkbox" id="cm-all"> Select all</label>
-      <div style="margin:4px 0 10px">
-        ${lists.map((x) => `<label style="display:block;margin:4px 0"><input type="checkbox" class="cm-list" data-mail="${esc(x.f.Title)}" data-count="${esc(x.f.RecipientCount || 0)}"> ${esc(x.f.Title)} <span class="muted">· ${esc(x.f.RecipientCount || 0)} recipients</span></label>`).join("")}
-      </div>
+      ${filterControls(lists, "cm-f")}
+      <label style="display:block;margin:8px 0 4px;font-weight:600"><input type="checkbox" id="cm-all"> Select all shown</label>
+      <div id="cm-groups" style="margin:4px 0 10px">${groupHtml}</div>
       <div class="muted" id="cm-total" style="margin:6px 0">Selected: 0 lists · ~0 recipients</div>
       <div class="toolbar" style="flex-direction:column;align-items:stretch;gap:8px;max-width:640px">
         <input type="text" id="cm-subject" placeholder="Subject" style="padding:8px" />
@@ -436,14 +475,49 @@ const EMAILLISTS = (() => {
       <div style="margin-top:12px"><button class="btn-primary" id="cm-send">Send…</button></div>
     </div>`;
     document.getElementById("cm-back").addEventListener("click", load);
+
+    const visibleRows = () => [...document.querySelectorAll(".cm-row")].filter((r) => r.style.display !== "none");
     const updateTotal = () => {
       const sel = [...document.querySelectorAll(".cm-list:checked")];
       const total = sel.reduce((s, cb) => s + (+cb.dataset.count || 0), 0);
       document.getElementById("cm-total").textContent = `Selected: ${sel.length} list${sel.length === 1 ? "" : "s"} · ~${total} recipients`;
+      // reflect group / select-all checkbox state from their currently-visible children
+      const vis = visibleRows();
+      document.querySelectorAll(".cm-group-all").forEach((ga) => {
+        const kids = vis.filter((r) => r.dataset.group === ga.dataset.group).map((r) => r.querySelector(".cm-list"));
+        ga.checked = kids.length > 0 && kids.every((cb) => cb.checked);
+        ga.indeterminate = !ga.checked && kids.some((cb) => cb.checked);
+      });
+      const allCb = document.getElementById("cm-all");
+      const visCbs = vis.map((r) => r.querySelector(".cm-list"));
+      allCb.checked = visCbs.length > 0 && visCbs.every((cb) => cb.checked);
+      allCb.indeterminate = !allCb.checked && visCbs.some((cb) => cb.checked);
     };
+
     document.querySelectorAll(".cm-list").forEach((cb) => cb.addEventListener("change", updateTotal));
-    const cmAll = document.getElementById("cm-all");
-    if (cmAll) cmAll.addEventListener("change", () => { document.querySelectorAll(".cm-list").forEach((cb) => { cb.checked = cmAll.checked; }); updateTotal(); });
+    // group "select all" toggles only the currently-visible rows in that group
+    document.querySelectorAll(".cm-group-all").forEach((ga) => ga.addEventListener("change", () => {
+      visibleRows().filter((r) => r.dataset.group === ga.dataset.group).forEach((r) => { r.querySelector(".cm-list").checked = ga.checked; });
+      updateTotal();
+    }));
+    document.getElementById("cm-all").addEventListener("change", (e) => {
+      visibleRows().forEach((r) => { r.querySelector(".cm-list").checked = e.target.checked; });
+      updateTotal();
+    });
+
+    // Type / Gender / Age / text filters hide rows; empty groups collapse their header too.
+    wireFilters("cm-f", (c, g, a, t) => {
+      document.querySelectorAll(".cm-row").forEach((r) => {
+        const ok = (!c || r.dataset.cat === c) && (!g || r.dataset.gender === g) && (!a || r.dataset.age === a) && (!t || (r.dataset.text || "").includes(t));
+        r.style.display = ok ? "" : "none";
+      });
+      document.querySelectorAll(".cm-group").forEach((grp) => {
+        const any = [...grp.querySelectorAll(".cm-row")].some((r) => r.style.display !== "none");
+        grp.style.display = any ? "" : "none";
+      });
+      updateTotal();
+    });
+
     document.getElementById("cm-send").addEventListener("click", onSend);
   }
 
