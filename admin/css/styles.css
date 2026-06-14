@@ -998,3 +998,27 @@ body.viewmode-owner .cu-admin-only {
 .help-admin, .help-owner { display: none; }
 body.viewmode-admin .help-admin { display: block; }
 body.viewmode-owner .help-owner { display: block; }
+
+/* --- Send-to-lists WYSIWYG email editor --- */
+.cm-editor-wrap { max-width: 640px; }
+.cm-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+  padding: 6px 8px; background: #f4f6f9;
+  border: 1px solid #c5cee0; border-bottom: none; border-radius: 4px 4px 0 0;
+}
+.cm-tb-btn {
+  min-width: 30px; padding: 4px 8px; cursor: pointer;
+  background: #fff; color: #1B4F8C; border: 1px solid #c5cee0; border-radius: 4px;
+  font-size: 13px; line-height: 1.2;
+}
+.cm-tb-btn:hover  { background: #1B4F8C; color: #fff; }
+.cm-tb-btn:active { background: #154070; color: #fff; }
+.cm-tb-sep { width: 1px; align-self: stretch; background: #c5cee0; margin: 2px 4px; }
+.cm-body {                       /* MATCHES the sent wrapBrandedHtml inner div for true WYSIWYG */
+  font-family: Arial, sans-serif; font-size: 14px; color: #222; line-height: 1.6;
+  min-height: 200px; padding: 18px; background: #fff; overflow-y: auto;
+  border: 1px solid #c5cee0; border-radius: 0 0 4px 4px;
+}
+.cm-body:focus { outline: none; border-color: #1B4F8C; box-shadow: 0 0 0 2px rgba(27,79,140,0.15); }
+.cm-body:empty::before { content: attr(data-placeholder); color: #999; pointer-events: none; }
+.cm-body a { color: #1B4F8C; }

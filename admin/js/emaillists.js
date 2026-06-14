@@ -428,12 +428,92 @@ const EMAILLISTS = (() => {
 
   // --- compose & send to one or more of the director's lists (BCC; sends as the director) ---
   const EXO_DAILY = 10000;   // EXO recipient-rate limit per mailbox per day (approx)
-  function wrapBranded(bodyText) {
-    const safe = esc(bodyText).replace(/\n/g, "<br>");
+  // Wrap already-sanitized editor HTML in the EVAA branded shell. Caller MUST pass sanitized
+  // HTML (sanitizeHtml) — this does NOT escape. The editable area's CSS mirrors the inner div
+  // (Arial 14px #222 line-height 1.6) so the composer is true WYSIWYG.
+  function wrapBrandedHtml(safeHtml) {
     return `<div style="font-family:Arial,sans-serif;font-size:14px;color:#222;max-width:640px;line-height:1.6">
       <div style="background:#1B4F8C;color:#fff;padding:12px 18px;font-weight:600;border-radius:6px 6px 0 0">Eastview Athletic Association</div>
-      <div style="border:1px solid #e3e8ef;border-top:none;padding:18px;border-radius:0 0 6px 6px">${safe}</div>
+      <div style="border:1px solid #e3e8ef;border-top:none;padding:18px;border-radius:0 0 6px 6px">${safeHtml}</div>
     </div>`;
+  }
+
+  // --- email-safe HTML sanitizer (shared by paste + send) ---
+  // Allowlist of tags/attrs that render reliably across Outlook/Gmail with INLINE styles only.
+  const SAN_TAGS = new Set(["B", "STRONG", "I", "EM", "U", "A", "UL", "OL", "LI", "BR", "P", "SPAN", "DIV"]);
+  const SAN_ATTRS = { A: new Set(["href", "target", "rel"]), SPAN: new Set(["style"]) };
+  const SAN_DROP = new Set(["SCRIPT", "STYLE", "HEAD", "META", "LINK", "TITLE", "OBJECT", "IFRAME", "EMBED", "NOSCRIPT"]);
+  const SAN_STYLE_OK = ["color", "font-weight", "font-style", "text-decoration", "font-size", "background-color"];
+  function stripMsoComments(html) {
+    return String(html)
+      .replace(/<!--[\s\S]*?-->/g, "")              // comments incl. <!--[if mso]>
+      .replace(/<\/?(?:o|v|w|m|st1):[^>]*>/gi, "")  // Office tags <o:p>, <v:*>, <w:*>, …
+      .replace(/<\?xml[^>]*>/gi, "");
+  }
+  function sanitizeStyle(s) {
+    return String(s).split(";").map((d) => d.trim()).filter(Boolean).filter((d) => {
+      const prop = d.split(":")[0].trim().toLowerCase();
+      if (!SAN_STYLE_OK.includes(prop)) return false;
+      if (/url\s*\(|expression|javascript:/i.test(d)) return false;
+      return true;
+    }).join("; ");
+  }
+  function sanUnwrap(el) { const p = el.parentNode; while (el.firstChild) p.insertBefore(el.firstChild, el); p.removeChild(el); }
+  function sanitizeHtml(html) {
+    const rootEl = document.createElement("div");
+    rootEl.innerHTML = stripMsoComments(html);
+    const walk = (node) => {
+      [...node.childNodes].forEach((child) => {
+        if (child.nodeType === Node.COMMENT_NODE) { child.remove(); return; }
+        if (child.nodeType !== Node.ELEMENT_NODE) return;     // keep text nodes
+        const tag = child.tagName.toUpperCase();
+        if (SAN_DROP.has(tag)) { child.remove(); return; }    // drop element + contents
+        if (!SAN_TAGS.has(tag)) { walk(child); sanUnwrap(child); return; }  // unwrap unknown, keep text
+        [...child.attributes].forEach((attr) => {
+          const name = attr.name.toLowerCase();
+          const allowed = SAN_ATTRS[tag] && SAN_ATTRS[tag].has(name);
+          if (!allowed || name.startsWith("on")) { child.removeAttribute(attr.name); return; }
+          if (name === "href" && !/^(https?:|mailto:)/i.test((attr.value || "").trim())) child.removeAttribute("href");
+          if (name === "style") { const clean = sanitizeStyle(attr.value); if (clean) child.setAttribute("style", clean); else child.removeAttribute("style"); }
+        });
+        if (tag === "A" && child.getAttribute("href")) { child.setAttribute("target", "_blank"); child.setAttribute("rel", "noopener noreferrer"); }
+        walk(child);
+      });
+    };
+    walk(rootEl);
+    return rootEl.innerHTML;
+  }
+  function onEditorPaste(e) {
+    e.preventDefault();
+    const cb = e.clipboardData || window.clipboardData;
+    const html = cb.getData("text/html");
+    const insert = html ? sanitizeHtml(html) : esc(cb.getData("text/plain") || "").replace(/\r?\n/g, "<br>");
+    document.execCommand("insertHTML", false, insert);
+  }
+  function insertLink(editor) {
+    const sel = window.getSelection();
+    const hadSelection = sel && sel.rangeCount && !sel.isCollapsed && editor.contains(sel.anchorNode);
+    let url = prompt("Link URL (https://…):", "https://");
+    if (url == null) return;
+    url = url.trim(); if (!url) return;
+    if (/^(javascript|data|vbscript|file):/i.test(url)) { alert("That link type isn't allowed."); return; }
+    if (!/^(https?:|mailto:)/i.test(url)) url = "https://" + url.replace(/^\/+/, "");
+    editor.focus();
+    if (hadSelection) { document.execCommand("createLink", false, url); }
+    else { const label = prompt("Link text:", url) || url; document.execCommand("insertHTML", false, `<a href="${esc(url)}">${esc(label)}</a>`); }
+  }
+  function wireEditor(toolbar, editor) {
+    try { document.execCommand("styleWithCSS", false, false); } catch (_) { /* emit tags, not css spans */ }
+    // mousedown + preventDefault keeps the caret/selection in the editor (a click would move
+    // focus to the button and execCommand would no-op).
+    toolbar.addEventListener("mousedown", (e) => {
+      const btn = e.target.closest(".cm-tb-btn"); if (!btn) return;
+      e.preventDefault();
+      editor.focus();
+      if (btn.dataset.cmd === "createLink") { insertLink(editor); return; }
+      document.execCommand(btn.dataset.cmd, false, null);
+    });
+    editor.addEventListener("paste", onEditorPaste);
   }
 
   function openCompose() {
@@ -470,7 +550,20 @@ const EMAILLISTS = (() => {
       <div class="muted" id="cm-total" style="margin:6px 0">Selected: 0 lists · ~0 recipients</div>
       <div class="toolbar" style="flex-direction:column;align-items:stretch;gap:8px;max-width:640px">
         <input type="text" id="cm-subject" placeholder="Subject" style="padding:8px" />
-        <textarea id="cm-body" placeholder="Write your message…" rows="10" style="padding:8px;font-family:inherit"></textarea>
+        <div class="cm-editor-wrap">
+          <div class="cm-toolbar" id="cm-toolbar" role="toolbar" aria-label="Formatting">
+            <button type="button" class="cm-tb-btn" data-cmd="bold" title="Bold (Ctrl+B)"><b>B</b></button>
+            <button type="button" class="cm-tb-btn" data-cmd="italic" title="Italic (Ctrl+I)"><i>I</i></button>
+            <button type="button" class="cm-tb-btn" data-cmd="underline" title="Underline (Ctrl+U)"><u>U</u></button>
+            <span class="cm-tb-sep"></span>
+            <button type="button" class="cm-tb-btn" data-cmd="insertUnorderedList" title="Bulleted list">• List</button>
+            <button type="button" class="cm-tb-btn" data-cmd="insertOrderedList" title="Numbered list">1. List</button>
+            <span class="cm-tb-sep"></span>
+            <button type="button" class="cm-tb-btn" data-cmd="createLink" title="Insert link">🔗 Link</button>
+            <button type="button" class="cm-tb-btn" data-cmd="removeFormat" title="Clear formatting">⨯ Clear</button>
+          </div>
+          <div id="cm-body" class="cm-body" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="Write your message…"></div>
+        </div>
       </div>
       <div style="margin-top:12px"><button class="btn-primary" id="cm-send">Send…</button></div>
     </div>`;
@@ -518,16 +611,20 @@ const EMAILLISTS = (() => {
       updateTotal();
     });
 
+    wireEditor(document.getElementById("cm-toolbar"), document.getElementById("cm-body"));
     document.getElementById("cm-send").addEventListener("click", onSend);
   }
 
   async function onSend() {
     const selected = [...document.querySelectorAll(".cm-list:checked")].map((cb) => ({ mail: cb.dataset.mail, count: +cb.dataset.count || 0 }));
     const subject = (document.getElementById("cm-subject").value || "").trim();
-    const bodyText = (document.getElementById("cm-body").value || "").trim();
+    const editor = document.getElementById("cm-body");
+    // contenteditable "empty" can be "", "<br>", "<div><br></div>", or whitespace — check the text, not the HTML.
+    const plainBody = (editor.innerText || editor.textContent || "").replace(/ /g, " ").trim();
     if (!selected.length) { alert("Select at least one list to send to."); return; }
     if (!subject) { alert("Enter a subject."); return; }
-    if (!bodyText) { alert("Enter a message."); return; }
+    if (!plainBody) { alert("Enter a message."); return; }
+    const cleanHtml = sanitizeHtml(editor.innerHTML);
     const total = selected.reduce((s, x) => s + x.count, 0);
     const lines = selected.map((s) => `<li><code>${esc(s.mail)}</code> <span class="muted">(~${s.count})</span></li>`).join("");
     let warn = "";
@@ -546,7 +643,7 @@ const EMAILLISTS = (() => {
     try {
       const me = await GRAPH.getMe();
       myAddr = me.mail || me.userPrincipalName;
-      await GRAPH.sendMail([myAddr], subject, wrapBranded(bodyText), { bcc: selected.map((s) => s.mail), saveToSentItems: true });
+      await GRAPH.sendMail([myAddr], subject, wrapBrandedHtml(cleanHtml), { bcc: selected.map((s) => s.mail), saveToSentItems: true });
       GRAPH.logAuditEntry({ actor: myAddr, action: "emaillist send message", targetGroup: selected.map((s) => s.mail).join(", "), result: "Success", notes: JSON.stringify({ subject, lists: selected.map((s) => s.mail), estRecipients: total, via: "bcc" }) });
       toast(`Sent to ${selected.length} list${selected.length > 1 ? "s" : ""} (~${total} recipients).`);
       load();
