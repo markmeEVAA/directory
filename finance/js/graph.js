@@ -189,8 +189,26 @@ const GRAPH = (() => {
     }
     const receipt = receiptFile ? await readFileAsBase64(receiptFile) : null;
     const me = await getMe();
+
+    // Build the payload from the form values, with type coercion at the API boundary.
+    // HTML <input type="number"> always reads .value as a string, so the JSON sent
+    // to the flow has Amount as "321" — but the flow trigger schema requires Number.
+    // Coerce numeric fields here so the trigger validator passes.
+    const cleanAmount = (v) => {
+      if (v === "" || v === null || v === undefined) return null;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    };
+
+    // Strip UI-only fields that the flow trigger schema doesn't define
+    // (DifferentMailingAddress is just the checkbox controlling whether
+    // the alt-address fields are visible; the alt values themselves are
+    // sent if present).
+    const { DifferentMailingAddress, ...formValues } = values;
+
     const payload = {
-      ...values,
+      ...formValues,
+      Amount: cleanAmount(formValues.Amount),
       // Trust client-supplied contact info but stamp the signed-in identity so the
       // flow can cross-check / overwrite if values were tampered with.
       _signedInUpn: me?.userPrincipalName || me?.mail || "",

@@ -126,7 +126,7 @@ const SCHEMA = (() => {
         { id: "PayeeZip", label: "Zip", type: "text",
           requiredWhen: { field: "RequestType", equals: "Check Request" } },
         // "Send to a different address" toggle — Check only.
-        // When checked, reveals the AltPayee* fields below.
+        // When checked, the AltPayee* fields below it become visible inline.
         {
           id: "DifferentMailingAddress",
           label: "Send the check to a different address",
@@ -135,6 +135,24 @@ const SCHEMA = (() => {
           when: { field: "RequestType", equals: "Check Request" },
           help: "Check this if the check should be mailed somewhere other than the vendor address.",
         },
+        // Alt mailing address — appears directly under the checkbox when it's ticked.
+        // Required iff visible.
+        { id: "AltPayeeName", label: "Recipient name", type: "text",
+          when: { field: "DifferentMailingAddress", equals: true },
+          requiredWhen: { field: "DifferentMailingAddress", equals: true },
+          help: "Who the check is made out to / sent to." },
+        { id: "AltPayeeAddress", label: "Street address", type: "text",
+          when: { field: "DifferentMailingAddress", equals: true },
+          requiredWhen: { field: "DifferentMailingAddress", equals: true } },
+        { id: "AltPayeeCity", label: "City", type: "text",
+          when: { field: "DifferentMailingAddress", equals: true },
+          requiredWhen: { field: "DifferentMailingAddress", equals: true } },
+        { id: "AltPayeeState", label: "State / Province", type: "text",
+          when: { field: "DifferentMailingAddress", equals: true },
+          requiredWhen: { field: "DifferentMailingAddress", equals: true } },
+        { id: "AltPayeeZip", label: "Zip", type: "text",
+          when: { field: "DifferentMailingAddress", equals: true },
+          requiredWhen: { field: "DifferentMailingAddress", equals: true } },
       ],
     },
     {
@@ -177,26 +195,8 @@ const SCHEMA = (() => {
         },
       ],
     },
-    {
-      id: "alternate_payee",
-      title: "Mailing address (different from vendor)",
-      help: "Where the physical check should be mailed.",
-      // Both gates: Check Request AND user toggled the "different address" checkbox.
-      when: { field: "DifferentMailingAddress", equals: true },
-      fields: [
-        { id: "AltPayeeName", label: "Recipient name", type: "text",
-          requiredWhen: { field: "DifferentMailingAddress", equals: true },
-          help: "Who the check is made out to / sent to." },
-        { id: "AltPayeeAddress", label: "Street address", type: "text",
-          requiredWhen: { field: "DifferentMailingAddress", equals: true } },
-        { id: "AltPayeeCity", label: "City", type: "text",
-          requiredWhen: { field: "DifferentMailingAddress", equals: true } },
-        { id: "AltPayeeState", label: "State / Province", type: "text",
-          requiredWhen: { field: "DifferentMailingAddress", equals: true } },
-        { id: "AltPayeeZip", label: "Zip", type: "text",
-          requiredWhen: { field: "DifferentMailingAddress", equals: true } },
-      ],
-    },
+    // (alternate_payee section removed — alt-address fields moved inline above,
+    // appearing right under the "Send to a different address" checkbox.)
   ];
 
   // ─── EVALUATOR ────────────────────────────────────────────────────────────
