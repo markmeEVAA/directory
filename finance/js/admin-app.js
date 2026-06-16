@@ -427,7 +427,15 @@
 
   function renderOptionsEditor() {
     const container = $("options-editor");
+    if (!container) { console.error("[finance] options-editor div missing"); return; }
+    if (!Array.isArray(options)) {
+      container.innerHTML = `<div class="alert alert-error">Options array isn't loaded yet (type=${typeof options}). Refresh the page.</div>`;
+      console.error("[finance] options is not an array:", options);
+      return;
+    }
+    console.log(`[finance] renderOptionsEditor: ${options.length} options loaded`);
     const typeOrder = ["Sport", "ExpenseCategory", "ProgramType", "TravelingSubtype", "Season", "VendorCardinality", "RequestType"];
+    try {
     container.innerHTML = typeOrder.map((type) => {
       const rows = options
         .filter((o) => o.type === type)
@@ -451,6 +459,10 @@
       </div>`;
     }).join("");
     wireOptionsHandlers();
+    } catch (err) {
+      console.error("[finance] renderOptionsEditor threw:", err);
+      container.innerHTML = `<div class="alert alert-error">Options editor crashed: ${escapeHtml(err.message)}<br><br><pre style="font-size:11px;overflow:auto;">${escapeHtml(String(err.stack || ""))}</pre></div>`;
+    }
   }
 
   function optionRowHtml(opt, showCodeCol) {
