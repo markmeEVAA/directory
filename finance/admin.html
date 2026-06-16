@@ -51,48 +51,71 @@
     </section>
 
     <section id="view-console" class="view hidden">
-      <div class="console-toolbar">
-        <label>Type
-          <select id="filter-type"><option value="">All</option></select>
-        </label>
-        <label>Status
-          <select id="filter-status">
-            <option value="">All</option>
-            <option value="Submitted">Submitted</option>
-            <option value="Under Review">Under Review</option>
-            <option value="Approved">Approved</option>
-            <option value="Paid/Deposited">Paid/Deposited</option>
-            <option value="Denied">Denied</option>
-            <option value="__open">Open (Submitted + Review + Approved)</option>
-          </select>
-        </label>
-        <label>Sport
-          <select id="filter-sport"><option value="">All</option></select>
-        </label>
-        <label>Search
-          <input id="filter-search" type="search" placeholder="requester, payee, notes…" />
-        </label>
-        <span class="spacer"></span>
-        <button id="refresh-btn" class="btn-secondary">Refresh</button>
+      <!-- Tab bar -->
+      <div class="console-tabs">
+        <button class="tab-btn active" data-tab="requests">Requests</button>
+        <button class="tab-btn" data-tab="options">Categories / Options</button>
       </div>
 
-      <p id="result-summary" style="color:#6c7682; font-size:0.9em; margin: 4px 4px 12px;"></p>
+      <!-- Requests tab -->
+      <div class="tab-panel" data-panel="requests">
+        <div class="console-toolbar">
+          <label>Type
+            <select id="filter-type"><option value="">All</option></select>
+          </label>
+          <label>Status
+            <select id="filter-status">
+              <option value="">All</option>
+              <option value="Submitted">Submitted</option>
+              <option value="Under Review">Under Review</option>
+              <option value="Approved">Approved</option>
+              <option value="Paid/Deposited">Paid/Deposited</option>
+              <option value="Exported">Exported</option>
+              <option value="Denied">Denied</option>
+              <option value="__open">Open (Submitted + Review + Approved)</option>
+              <option value="__unexported">Unexported (Paid/Deposited)</option>
+            </select>
+          </label>
+          <label>Sport
+            <select id="filter-sport"><option value="">All</option></select>
+          </label>
+          <label>Search
+            <input id="filter-search" type="search" placeholder="requester, payee, notes…" />
+          </label>
+          <span class="spacer"></span>
+          <button id="export-btn" class="btn-secondary" title="Export filtered rows to CSV">⬇ Export CSV</button>
+          <button id="refresh-btn" class="btn-secondary">Refresh</button>
+        </div>
 
-      <div class="console-table">
-        <table>
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Requester</th>
-              <th>Type</th>
-              <th>Sport</th>
-              <th>Payee / Payer</th>
-              <th>Amount</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody id="rows"></tbody>
-        </table>
+        <p id="result-summary" style="color:#6c7682; font-size:0.9em; margin: 4px 4px 12px;"></p>
+
+        <div class="console-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Requester</th>
+                <th>Type</th>
+                <th>Sport</th>
+                <th>Category</th>
+                <th>Payee / Payer</th>
+                <th>Amount</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Options tab -->
+      <div class="tab-panel hidden" data-panel="options">
+        <p style="color:#6c7682; font-size:0.9em;">
+          These dropdown options appear in the public submission form at <code>/finance/</code>.
+          Changes here take effect on the next page load (no code deploy needed).
+          Account codes are only used for the export CSV — not shown to submitters.
+        </p>
+        <div id="options-editor"></div>
       </div>
     </section>
 

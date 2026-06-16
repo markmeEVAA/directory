@@ -16,6 +16,10 @@ const GRAPH = (() => {
   const FINANCE_LIST = "FinanceRequests";
   const RECEIPT_LIBRARY = "FinanceReceipts";
   const AUDIT_LIST = "AdminActionLog";
+  const OPTIONS_LIST = "FinanceFormOptions";
+
+  // Option types — must match FinanceFormOptions OptionType choice column
+  const OPTION_TYPES = ["Sport", "ExpenseCategory", "ProgramType", "TravelingSubtype", "Season", "VendorCardinality", "RequestType"];
 
   // Treasurer / Leadership group — gates console access.
   // Mirrors /admin/js/graph.js ADMIN_GROUP_IDS.
@@ -207,6 +211,75 @@ const GRAPH = (() => {
     return resp.json().catch(() => ({ status: "submitted" }));
   }
 
+  // ─── FinanceFormOptions — dropdown source of truth ─────────────────────────
+  // Cached per session so we don't re-fetch on every page render.
+  let _optionsCache = null;
+  async function getFinanceFormOptions({ force = false } = {}) {
+    if (!force && _optionsCache) return _optionsCache;
+    const siteId = await getSiteId();
+    const items = await callGraphAll(
+      `/sites/${siteId}/lists/${encodeURIComponent(OPTIONS_LIST)}/items?expand=fields&$top=999`
+    );
+    // Shape: [{ id, title, type, code, order, active }]
+    const opts = items.map((it) => {
+      const f = it.fields || {};
+      return {
+        id: it.id,
+        title: f.Title || "",
+        type: f.OptionType || "",
+        code: f.AccountCode || "",
+        order: typeof f.DisplayOrder === "number" ? f.DisplayOrder : 0,
+        active: f.Active !== false,
+      };
+    });
+    _optionsCache = opts;
+    return opts;
+  }
+
+  // Return active options for a given type, sorted by DisplayOrder.
+  async function getOptionsByType(type) {
+    const all = await getFinanceFormOptions();
+    return all
+      .filter((o) => o.type === type && o.active)
+      .sort((a, b) => (a.order - b.order) || a.title.localeCompare(b.title));
+  }
+
+  // Lookup the account code for a category title (or any type+title pair).
+  // Returns the code string, or "" if not found / no code defined.
+  async function lookupAccountCode(type, title) {
+    const all = await getFinanceFormOptions();
+    const match = all.find((o) => o.type === type && o.title === title);
+    return (match && match.code) || "";
+  }
+
+  // CRUD for the Options tab in the admin console
+  async function createFormOption({ title, type, code, order, active }) {
+    const siteId = await getSiteId();
+    const fields = { Title: title, OptionType: type, AccountCode: code || "", DisplayOrder: order || 0, Active: active !== false };
+    _optionsCache = null;
+    return callGraph(`/sites/${siteId}/lists/${encodeURIComponent(OPTIONS_LIST)}/items`, {
+      method: "POST",
+      body: JSON.stringify({ fields }),
+    });
+  }
+
+  async function updateFormOption(itemId, patchFields) {
+    const siteId = await getSiteId();
+    _optionsCache = null;
+    return callGraph(`/sites/${siteId}/lists/${encodeURIComponent(OPTIONS_LIST)}/items/${itemId}/fields`, {
+      method: "PATCH",
+      body: JSON.stringify(patchFields),
+    });
+  }
+
+  async function deleteFormOption(itemId) {
+    const siteId = await getSiteId();
+    _optionsCache = null;
+    return callGraph(`/sites/${siteId}/lists/${encodeURIComponent(OPTIONS_LIST)}/items/${itemId}`, {
+      method: "DELETE",
+    });
+  }
+
   // ─── Treasurer console — Graph CRUD on FinanceRequests ─────────────────────
 
   // List all FinanceRequests with all fields expanded.
@@ -239,9 +312,22 @@ const GRAPH = (() => {
         return name.startsWith(prefix);
       });
       if (!match) return null;
+      const di = match.driveItem || {};
+      const name = di.name || (match.fields && match.fields.FileLeafRef) || "receipt";
+      // Fetch the @microsoft.graph.downloadUrl for inline preview — short-lived pre-authed URL.
+      // The expand=driveItem already gives us name + webUrl but not downloadUrl, so fetch
+      // the drive item directly.
+      let downloadUrl = null;
+      const driveId = di.parentReference && di.parentReference.driveId;
+      if (driveId && di.id) {
+        const full = await callGraph(`/drives/${driveId}/items/${di.id}?$select=name,webUrl,@microsoft.graph.downloadUrl,file`);
+        downloadUrl = full && full["@microsoft.graph.downloadUrl"];
+      }
       return {
-        name: (match.driveItem && match.driveItem.name) || (match.fields && match.fields.FileLeafRef) || "receipt",
-        webUrl: match.driveItem && match.driveItem.webUrl,
+        name,
+        webUrl: di.webUrl,
+        downloadUrl,
+        mimeType: di.file && di.file.mimeType || (name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/jpeg"),
       };
     } catch (e) {
       console.warn("Receipt lookup failed (non-fatal):", e);
@@ -311,5 +397,12 @@ const GRAPH = (() => {
     updateRequestStatus,
     logAuditEntry,
     readFileAsBase64,
+    getFinanceFormOptions,
+    getOptionsByType,
+    lookupAccountCode,
+    createFormOption,
+    updateFormOption,
+    deleteFormOption,
+    OPTION_TYPES,
   };
 })();

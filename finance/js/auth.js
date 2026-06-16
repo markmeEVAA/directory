@@ -9,7 +9,10 @@ const AUTH = (() => {
 
   // Detect which page we're on and request only the scopes that page needs.
   // app.js (submission form) calls init() with consoleMode=false; admin-app.js with true.
-  const SCOPES_SUBMITTER = ["User.Read"];
+  // Submitter needs Sites.Read.All to fetch FinanceFormOptions (dropdown source of truth).
+  // Sites.Read.All is already admin-consented for this app reg via the existing
+  // Sites.ReadWrite.All grant — Read is a subset.
+  const SCOPES_SUBMITTER = ["User.Read", "Sites.Read.All"];
   const SCOPES_CONSOLE = ["User.Read", "Sites.ReadWrite.All", "Mail.Send"];
 
   let SCOPES = SCOPES_SUBMITTER;

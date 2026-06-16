@@ -62,6 +62,13 @@
   const values = {};
   let receiptFile = null;
 
+  // Load dropdown options from FinanceFormOptions list before first render
+  try {
+    await SCHEMA.load();
+  } catch (e) {
+    console.warn("Schema option load failed — using defaults:", e);
+  }
+
   // Prefill from /me where possible
   values.FirstName = me.givenName || (me.displayName || "").split(" ")[0] || "";
   values.LastName = me.surname || (me.displayName || "").split(" ").slice(1).join(" ") || "";

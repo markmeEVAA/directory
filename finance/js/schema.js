@@ -1,86 +1,56 @@
 // EVAA Finance Requests — form schema
-// Config-driven so the UI in app.js renders whatever lives here.
-// Source: SportsEngine survey #6743 ("Credit Card / Deposits / Check Request Form"),
-// reconstructed from three real submissions in the treasurer mail thread (2020–21):
-// 2 Check variants (single + multiple vendor) and 1 Deposit. The SE form was a
-// single set of questions with a type selector at the top — this schema mirrors that.
+// Schema definition + dynamic option loading from FinanceFormOptions SP list.
 //
-// Design notes:
-//   - One unified question set across Check / Deposit / Credit Card.
-//   - Only narrow conditional bits:
-//       * Vendor/Payer NAME label flips from "Vendor name" → "Payer name / company" for Deposit (matches SE).
-//       * The "Recipient (if different)" trailing block only shows for Check (per Mark — that's
-//         the alternate "make the check payable to" mailing address. Deposit and CC don't have
-//         a check to mail.)
-//   - Sport gives the treasurer enough context to reconcile against the credit card statement;
-//     no separate CardLast4 / TransactionDate fields. If the submitter wants to note them, the
-//     Notes field is fine.
+// The form *shape* (sections, field IDs, conditional visibility) is fixed here.
+// The dropdown *contents* live in SharePoint list "FinanceFormOptions" and are
+// loaded async via GRAPH.getOptionsByType(). Call `await SCHEMA.load()` once on
+// page boot before the first render — see app.js.
 //
-// Field shape:
-//   { id, label, type, required, options?, when?, help?, labelByType? }
-//   labelByType: { [RequestType]: "alternate label" } — picked at render time.
-//   type: text | email | tel | date | number | currency | choice | textarea | file
-//   when: optional predicate { field, equals: <value or array> } controlling visibility
+// To add a new sport / category / etc., treasurer edits the SP list. No code change.
 
 const SCHEMA = (() => {
-  // ─── SHARED ENUMS ─────────────────────────────────────────────────────────────
-  const REQUEST_TYPES = ["Check Request", "Deposit Request", "Credit Card Use"];
+  // ─── DYNAMIC ENUMS — populated by load() ──────────────────────────────────
+  // Defaults are sensible fallbacks so the form can render even if the options
+  // list isn't reachable. Real values overwrite these on load().
+  const enums = {
+    REQUEST_TYPES: ["Check Request", "Deposit Request", "Credit Card Use"],
+    SPORTS: [],
+    PROGRAM_TYPE: [],
+    TRAVELING_SUBTYPE: [],
+    SEASON: [],
+    EXPENSE_CATEGORY: [],
+    VENDOR_CARDINALITY: ["Single Vendor", "Multiple Vendors"],
+  };
 
-  const SPORTS = [
-    "Baseball",
-    "Basketball",
-    "Cross Country Running",
-    "Football",
-    "Lacrosse",
-    "Soccer",
-    "Softball",
-    "Tennis",
-    "Track",
-    "Trap",
-    "Volleyball",
-    "Wrestling",
-    "XC Ski",
-    "Multi-Sport / Operations",
-    "Other (note in details)",
-  ];
+  // Async loader — pulls FinanceFormOptions and populates `enums`.
+  // Idempotent (cached in GRAPH layer); safe to await multiple times.
+  async function load() {
+    if (typeof GRAPH === "undefined" || !GRAPH.getOptionsByType) return; // caller didn't load graph.js yet — defaults stay
+    try {
+      const [sports, cats, prog, travel, season, vendor, req] = await Promise.all([
+        GRAPH.getOptionsByType("Sport"),
+        GRAPH.getOptionsByType("ExpenseCategory"),
+        GRAPH.getOptionsByType("ProgramType"),
+        GRAPH.getOptionsByType("TravelingSubtype"),
+        GRAPH.getOptionsByType("Season"),
+        GRAPH.getOptionsByType("VendorCardinality"),
+        GRAPH.getOptionsByType("RequestType"),
+      ]);
+      enums.SPORTS            = sports.map((o) => o.title);
+      enums.EXPENSE_CATEGORY  = cats.map((o) => o.title);
+      enums.PROGRAM_TYPE      = prog.map((o) => o.title);
+      enums.TRAVELING_SUBTYPE = travel.map((o) => o.title);
+      enums.SEASON            = season.map((o) => o.title);
+      if (vendor.length) enums.VENDOR_CARDINALITY = vendor.map((o) => o.title);
+      if (req.length) enums.REQUEST_TYPES = req.map((o) => o.title);
+    } catch (e) {
+      console.warn("SCHEMA.load() failed — falling back to defaults:", e);
+    }
+  }
 
-  // Program type (the existing SE form just had "Traveling" — we add In-House etc.)
-  const PROGRAM_TYPE = ["Traveling", "In-House", "All", "N/A"];
-
-  // Only when PROGRAM_TYPE === "Traveling"
-  const TRAVELING_SUBTYPE = ["Fall Traveling", "Spring Traveling", "Summer Traveling", "Winter Traveling"];
-
-  // Seasons (existing SE)
-  const SEASON = ["This request is for the current season.", "This request is for the upcoming season."];
-
-  // Expense categories — extracted from real submissions + the typical EVAA list
-  const EXPENSE_CATEGORY = [
-    "Coaching Fees",
-    "Tournament Registration Fees",
-    "Tournament Registration Fees Income",
-    "Concession Income",
-    "Equipment",
-    "Uniforms",
-    "Field/Facility Rental",
-    "Officials / Refs",
-    "Awards / Trophies",
-    "Insurance",
-    "Background Checks",
-    "Training / Clinics",
-    "Travel / Lodging",
-    "Marketing / Promotion",
-    "Office / Supplies",
-    "Bank Fees",
-    "Reimbursement",
-    "Miscellaneous Income",
-    "Other (note in details)",
-  ];
-
-  // Vendor cardinality (same question for all three types, per SE)
-  const VENDOR_CARDINALITY = ["Single Vendor", "Multiple Vendors"];
-
-  // ─── FORM SECTIONS ────────────────────────────────────────────────────────────
-
+  // ─── FORM SECTIONS ────────────────────────────────────────────────────────
+  // Sections reference enums.* indirectly via a getter so the renderer always
+  // sees the latest values after load().
   const sections = [
     {
       id: "request_type",
@@ -91,7 +61,7 @@ const SCHEMA = (() => {
           label: "Is this a check request, deposit request, or credit card use?",
           type: "choice",
           required: true,
-          options: REQUEST_TYPES,
+          get options() { return enums.REQUEST_TYPES; },
           help: "All other questions are the same regardless of choice. We just need to know which.",
         },
       ],
@@ -122,7 +92,7 @@ const SCHEMA = (() => {
           },
           type: "choice",
           required: true,
-          options: VENDOR_CARDINALITY,
+          get options() { return enums.VENDOR_CARDINALITY; },
         },
         {
           id: "VendorName",
@@ -155,19 +125,19 @@ const SCHEMA = (() => {
       id: "details",
       title: "Details",
       fields: [
-        { id: "Sport", label: "Sport / Program", type: "choice", required: true, options: SPORTS,
+        { id: "Sport", label: "Sport / Program", type: "choice", required: true, get options() { return enums.SPORTS; },
           help: "This is how the treasurer reconciles the request — pick the right sport even if the spend is shared." },
-        { id: "ProgramType", label: "Program type", type: "choice", required: false, options: PROGRAM_TYPE },
+        { id: "ProgramType", label: "Program type", type: "choice", required: false, get options() { return enums.PROGRAM_TYPE; } },
         {
           id: "TravelingSubtype",
           label: "Which traveling season?",
           type: "choice",
           required: false,
-          options: TRAVELING_SUBTYPE,
+          get options() { return enums.TRAVELING_SUBTYPE; },
           when: { field: "ProgramType", equals: "Traveling" },
         },
-        { id: "Season", label: "What season is this request for?", type: "choice", required: false, options: SEASON },
-        { id: "Category", label: "Expense / income category", type: "choice", required: true, options: EXPENSE_CATEGORY },
+        { id: "Season", label: "What season is this request for?", type: "choice", required: false, get options() { return enums.SEASON; } },
+        { id: "Category", label: "Expense / income category", type: "choice", required: true, get options() { return enums.EXPENSE_CATEGORY; } },
         {
           id: "Amount",
           label: "Total amount",
@@ -207,7 +177,7 @@ const SCHEMA = (() => {
     },
   ];
 
-  // ─── EVALUATOR ────────────────────────────────────────────────────────────────
+  // ─── EVALUATOR ────────────────────────────────────────────────────────────
   function isVisible(node, values) {
     const cond = node.when;
     if (!cond) return true;
@@ -216,7 +186,6 @@ const SCHEMA = (() => {
     return actual === cond.equals;
   }
 
-  // Pick the right label given the chosen RequestType (supports labelByType override).
   function labelFor(field, values) {
     if (field.labelByType && values && values.RequestType && field.labelByType[values.RequestType]) {
       return field.labelByType[values.RequestType];
@@ -224,7 +193,6 @@ const SCHEMA = (() => {
     return field.label;
   }
 
-  // Flatten visible fields (in section order) for validation + submit payload.
   function visibleFields(values) {
     const out = [];
     for (const sec of sections) {
@@ -238,11 +206,12 @@ const SCHEMA = (() => {
   }
 
   return {
+    load,
     sections,
     isVisible,
     labelFor,
     visibleFields,
-    enums: { REQUEST_TYPES, SPORTS, PROGRAM_TYPE, TRAVELING_SUBTYPE, SEASON, EXPENSE_CATEGORY, VENDOR_CARDINALITY },
+    enums,
     sourceSurveyId: 6743,
     sourceUrl: "https://evaa.sportngin.com/survey/show/6743",
   };

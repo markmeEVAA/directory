@@ -96,6 +96,139 @@
   padding-top: 18px;
 }
 
+/* Tab bar in treasurer console */
+.console-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 2px solid #d4dee8;
+  margin-bottom: 16px;
+}
+.console-tabs .tab-btn {
+  background: none;
+  border: none;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #6c7682;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+}
+.console-tabs .tab-btn:hover { color: #1B4F8C; }
+.console-tabs .tab-btn.active { color: #1B4F8C; border-bottom-color: #1B4F8C; }
+
+/* Options editor (Categories / Options tab) */
+.options-section {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  margin-bottom: 16px;
+  padding: 16px 18px;
+}
+.options-section h3 {
+  margin: 0 0 10px;
+  color: #1B4F8C;
+  font-size: 1.05em;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.options-section h3 .count {
+  background: #e8f0fa;
+  color: #1B4F8C;
+  border-radius: 10px;
+  padding: 1px 8px;
+  font-size: 0.75em;
+  font-weight: 600;
+}
+.options-section table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.options-section th {
+  text-align: left;
+  font-size: 0.8em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6c7682;
+  padding: 6px 8px;
+  border-bottom: 1px solid #eef2f7;
+}
+.options-section td { padding: 6px 8px; border-bottom: 1px solid #f5f8fc; }
+.options-section td input[type="text"], .options-section td input[type="number"] {
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  font-size: 14px;
+  background: transparent;
+}
+.options-section td input:hover { border-color: #d4dee8; background: #fff; }
+.options-section td input:focus { border-color: #1B4F8C; background: #fff; outline: none; }
+.options-section td.code-col input { font-family: 'SF Mono', Menlo, monospace; font-size: 13px; }
+.options-section td.order-col { width: 80px; }
+.options-section td.code-col { width: 110px; }
+.options-section td.active-col { width: 60px; text-align: center; }
+.options-section td.actions-col { width: 30px; text-align: right; }
+.options-section .btn-add { margin-top: 8px; }
+.options-section .btn-del {
+  background: none; border: none; cursor: pointer; color: #99202a; padding: 4px;
+}
+.options-section .btn-del:hover { color: #6f0c14; }
+.options-section .save-indicator {
+  font-size: 0.8em; color: #6c7682; margin-left: 8px;
+}
+.options-section .save-indicator.ok { color: #226b1f; }
+.options-section .save-indicator.err { color: #99202a; }
+
+/* Image preview in detail drawer */
+.receipt-preview {
+  margin-top: 6px;
+  border: 1px solid #eef2f7;
+  border-radius: 4px;
+  padding: 8px;
+  background: #fafcfe;
+}
+.receipt-preview img {
+  max-width: 100%;
+  max-height: 380px;
+  border-radius: 4px;
+  display: block;
+  margin: 0 auto;
+}
+.receipt-preview .filename {
+  font-size: 0.85em;
+  color: #6c7682;
+  margin-top: 6px;
+  text-align: center;
+}
+.receipt-preview .download-link {
+  display: inline-block;
+  padding: 4px 10px;
+  background: #1B4F8C;
+  color: #fff;
+  text-decoration: none;
+  border-radius: 3px;
+  font-size: 0.85em;
+  margin-top: 4px;
+}
+
+/* Export dialog */
+.export-dialog {
+  position: fixed; inset: 0;
+  background: rgba(11,29,53,0.45);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 110;
+}
+.export-dialog.hidden { display: none; }
+.export-dialog .card {
+  background: #fff;
+  padding: 20px 24px;
+  border-radius: 8px;
+  max-width: 480px;
+  width: 100%;
+}
+.export-dialog h3 { margin-top: 0; color: #1B4F8C; }
+.export-dialog .checkbox-row { margin: 12px 0; display: flex; align-items: flex-start; gap: 8px; }
+.export-dialog .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
 /* Status pills (treasurer console) */
 .status-pill {
   display: inline-block;
@@ -109,6 +242,7 @@
 .status-UnderReview  { color: #8a5a00; background: #fff4dc; }
 .status-Approved     { color: #226b1f; background: #e3f5e1; }
 .status-PaidDeposited{ color: #226b1f; background: #d6efd4; }
+.status-Exported     { color: #4a5568; background: #e2e8f0; }
 .status-Denied       { color: #99202a; background: #fbe2e4; }
 
 .console-toolbar {
