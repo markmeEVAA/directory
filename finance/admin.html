@@ -137,9 +137,11 @@
     <a href="../admin/" style="color:inherit;">Admin portal</a>
   </footer>
 
-  <script src="./js/auth.js"></script>
-  <script src="./js/graph.js"></script>
-  <script src="./js/schema.js"></script>
-  <script src="./js/admin-app.js"></script>
+  <!-- ?v=phase2 forces browsers to re-fetch after the Phase 2 deploy. Bump on any future
+       JS-shape change to dodge the same stale-cache trap. -->
+  <script src="./js/auth.js?v=phase2"></script>
+  <script src="./js/graph.js?v=phase2"></script>
+  <script src="./js/schema.js?v=phase2"></script>
+  <script src="./js/admin-app.js?v=phase2"></script>
 </body>
 </html>
