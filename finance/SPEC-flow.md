@@ -2,12 +2,16 @@
 
 Mirrors the existing helper-flow pattern (e.g., `EVAA - Submit Member Request`).
 
+> ⚠️ **TESTING NOTE (2026-06-15):** Treasurer notifications temporarily routed to
+> `web-admin@evaasports.org` instead of `treasurer@evaasports.org` while Mark validates
+> the flow. Swap back before announcing the feature.
+
 ## Purpose
 Receives a JSON payload from the public `/finance/index.html` submission form (signed-in EVAA user, but with no direct SharePoint write rights), then performs the privileged work:
 
 1. Creates a new item in the `FinanceRequests` SharePoint list.
 2. If a receipt file was attached, uploads it to the `FinanceReceipts` document library and writes the resulting URL back to the list item.
-3. Emails `treasurer@evaasports.org` with the new submission summary + link.
+3. Emails `web-admin@evaasports.org` with the new submission summary + link.
 4. Emails the submitter a confirmation.
 
 Submitters never need SharePoint permissions because the flow runs as `web-admin@evaasports.org` (the flow owner).
@@ -94,22 +98,18 @@ Submitter identity is determined client-side from the MSAL account and put in `F
 ### 3. (Condition) — `length(triggerBody()?['Receipt']?['base64']) > 0`
 
 #### True branch (receipt present):
-- **Decode_Receipt** (Compose): `@base64ToBinary(triggerBody()?['Receipt']?['base64'])`
 - **Upload_Receipt** (SharePoint → Create file)
   - Site path: same as list
   - Folder path: `/FinanceReceipts`
-  - File name: `@{concat(outputs('Create_FinanceRequest_Item')?['body/ID'], '__', triggerBody()?['Receipt']?['fileName'])}`
-  - File content: `@outputs('Decode_Receipt')`
-- **Patch_Receipt_Url** (SharePoint → Update item)
-  - Item ID: `outputs('Create_FinanceRequest_Item')?['body/ID']`
-  - Fields:
-    - `ReceiptUrl`: `@{outputs('Upload_Receipt')?['body/{Link}']}`
-    - `ReceiptFileName`: `@{triggerBody()?['Receipt']?['fileName']}`
+  - File name: `@{concat(string(outputs('Create_FinanceRequest_Item')?['body/ID']), '__', triggerBody()?['Receipt']?['fileName'])}`
+  - File content: `@base64ToBinary(triggerBody()?['Receipt']?['base64'])`
+
+> 📝 **Why no separate patch step**: the original spec had a `Patch_Receipt_Url` action to write the receipt's URL onto the `FinanceRequests` item. The SP "Update item" operation strictly requires all required columns (Title, Amount, etc.) even on partial updates, which made the action error-prone. The treasurer console derives the receipt URL on-demand by scanning the `FinanceReceipts` library for files prefixed with the item ID (`GRAPH.getReceiptForRequest()` in `/finance/js/graph.js`). Simpler and avoids the constraint.
 
 #### Else branch: no-op.
 
 ### 4. Email_Treasurer (Office 365 Outlook → Send email V2)
-- To: `treasurer@evaasports.org`
+- To: `web-admin@evaasports.org`
 - Subject: `New {RequestType}: {Sport} — ${Amount} — {VendorName/PayerName}`
 - Body (HTML; same style language as the existing Approval Flow emails):
   - Greeting

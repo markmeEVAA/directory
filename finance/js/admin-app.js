@@ -214,7 +214,7 @@
       ["Mail check to",     [f.AltPayeeAddress, f.AltPayeeCity, f.AltPayeeState, f.AltPayeeZip].filter(Boolean).join(", ")],
       ["", "<hr style='border:none; border-top:1px solid #eee; margin:8px 0;'/>"],
       ["Notes",             f.Notes ? `<div style="white-space:pre-wrap;">${escapeHtml(f.Notes)}</div>` : ""],
-      ["Receipt",           f.ReceiptUrl ? `<a href="${escapeAttr(f.ReceiptUrl)}" target="_blank" rel="noopener">${escapeHtml(f.ReceiptFileName || "Open receipt")}</a>` : "(none uploaded)"],
+      ["Receipt",           `<span id="receipt-cell">${f.ReceiptUrl ? `<a href="${escapeAttr(f.ReceiptUrl)}" target="_blank" rel="noopener">${escapeHtml(f.ReceiptFileName || "Open receipt")}</a>` : "(looking up…)"}</span>`],
       ["Source",            f.SourceSystem || "Portal"],
       ["", "<hr style='border:none; border-top:1px solid #eee; margin:8px 0;'/>"],
       ["Treasurer notes",   `<textarea id="treasurer-notes" rows="3" style="width:100%;">${escapeHtml(f.TreasurerNotes || "")}</textarea>`],
@@ -259,6 +259,24 @@
     });
 
     $("detail-overlay").classList.remove("hidden");
+
+    // Async: look up the receipt by item-id prefix in FinanceReceipts library.
+    // The submission flow uploads files named "{itemId}__{filename}" but does NOT patch
+    // the request's ReceiptUrl field, so we discover it here.
+    if (!f.ReceiptUrl) {
+      GRAPH.getReceiptForRequest(item.id).then((rcpt) => {
+        const cell = document.getElementById("receipt-cell");
+        if (!cell) return;
+        if (rcpt && rcpt.webUrl) {
+          cell.innerHTML = `<a href="${escapeAttr(rcpt.webUrl)}" target="_blank" rel="noopener">${escapeHtml(rcpt.name)}</a>`;
+        } else {
+          cell.textContent = "(none uploaded)";
+        }
+      }).catch(() => {
+        const cell = document.getElementById("receipt-cell");
+        if (cell) cell.textContent = "(lookup failed)";
+      });
+    }
   }
 
   // ─── Helpers ───────────────────────────────────────────────────────────────

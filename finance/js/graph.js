@@ -24,12 +24,14 @@ const GRAPH = (() => {
     "12e5f9ce-d644-4052-aff8-b31e99c3acb9", // EVAA - Leadership (includes treasurer)
   ];
 
-  // Helper-flow URL — TODO: paste real SAS URL from the deployed
-  // "EVAA - Submit Finance Request" flow's HTTP trigger.
+  // Helper-flow URL — SAS-signed Power Automate trigger for "EVAA - Submit Finance Request".
   // Mirrors the pattern in /admin/js/graph.js SUBMIT_MEMBER_REQUEST_URL.
   // Safe to ship client-side: rows land with Status=Submitted and require treasurer review.
   const SUBMIT_FINANCE_REQUEST_URL =
-    "TODO_PASTE_DEPLOYED_FLOW_SAS_URL_HERE";
+    "https://defaultb5897a1bb85b42bd8e619b021b67d2.ce.environment.api.powerplatform.com:443/" +
+    "powerautomate/automations/direct/workflows/522553095c8a44789aadab98eabeb80f/" +
+    "triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&" +
+    "sig=voMKfSydAOdaC52hbwvFLcGNYtlOkQ-_GYlyeAz8Nac";
 
   // ─── Core ──────────────────────────────────────────────────────────────────
   async function callGraph(path, options = {}) {
@@ -220,6 +222,33 @@ const GRAPH = (() => {
     return callGraph(`/sites/${siteId}/lists/${encodeURIComponent(FINANCE_LIST)}/items/${itemId}?expand=fields`);
   }
 
+  // The submission flow uploads receipts to FinanceReceipts named "{itemId}__{filename}",
+  // but does NOT patch the FinanceRequests item's ReceiptUrl field (removed from the flow
+  // to dodge SP UpdateItem's required-field constraint). So the console finds the receipt
+  // by scanning the library for files starting with that prefix.
+  // Returns { name, webUrl } or null if no receipt was uploaded.
+  async function getReceiptForRequest(itemId) {
+    const siteId = await getSiteId();
+    try {
+      const items = await callGraphAll(
+        `/sites/${siteId}/lists/${encodeURIComponent(RECEIPT_LIBRARY)}/items?expand=driveItem,fields(select=FileLeafRef)&$top=999`
+      );
+      const prefix = String(itemId) + "__";
+      const match = items.find((it) => {
+        const name = (it.fields && it.fields.FileLeafRef) || (it.driveItem && it.driveItem.name) || "";
+        return name.startsWith(prefix);
+      });
+      if (!match) return null;
+      return {
+        name: (match.driveItem && match.driveItem.name) || (match.fields && match.fields.FileLeafRef) || "receipt",
+        webUrl: match.driveItem && match.driveItem.webUrl,
+      };
+    } catch (e) {
+      console.warn("Receipt lookup failed (non-fatal):", e);
+      return null;
+    }
+  }
+
   // Update item status (+ optional notes). Audit-logs the change.
   // `transition` is the new Status string.
   async function updateRequestStatus(itemId, transition, treasurerNotes) {
@@ -278,6 +307,7 @@ const GRAPH = (() => {
     submitFinanceRequest,
     listFinanceRequests,
     getFinanceRequest,
+    getReceiptForRequest,
     updateRequestStatus,
     logAuditEntry,
     readFileAsBase64,
