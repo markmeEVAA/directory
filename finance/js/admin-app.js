@@ -10,6 +10,19 @@
       $(v).classList.toggle("hidden", v !== id)
     );
 
+  // Display labels for option types (used by the Options-tab renderer).
+  // Declared up here so it's accessible from the first renderOptionsEditor()
+  // call (which fires before the bottom of the IIFE finishes — temporal-dead-zone trap).
+  const OPTION_TYPE_LABELS = {
+    Sport: "Sports",
+    ExpenseCategory: "Expense / income categories",
+    ProgramType: "Program types",
+    TravelingSubtype: "Traveling subtypes",
+    Season: "Seasons",
+    VendorCardinality: "Vendor cardinality",
+    RequestType: "Request types",
+  };
+
   // Status workflow
   const STATUS_ORDER = ["Submitted", "Under Review", "Approved", "Paid/Deposited", "Exported", "Denied"];
   const STATUS_CLASS = {
@@ -415,15 +428,8 @@
   }
 
   // ─── Options editor ────────────────────────────────────────────────────────
-  const OPTION_TYPE_LABELS = {
-    Sport: "Sports",
-    ExpenseCategory: "Expense / income categories",
-    ProgramType: "Program types",
-    TravelingSubtype: "Traveling subtypes",
-    Season: "Seasons",
-    VendorCardinality: "Vendor cardinality",
-    RequestType: "Request types",
-  };
+  // OPTION_TYPE_LABELS declared at the top of the IIFE so the first render()
+  // call (which fires before this section is reached) can see it.
 
   function renderOptionsEditor() {
     const container = $("options-editor");
