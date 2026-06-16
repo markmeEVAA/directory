@@ -82,48 +82,57 @@
   function fieldInput(field) {
     const id = `f-${field.id}`;
     const cur = values[field.id] ?? "";
-    const reqMark = field.required ? `<span class="req">*</span>` : "";
+    const required = SCHEMA.isRequired(field, values);
+    const reqMark = required ? `<span class="req">*</span>` : "";
     const help = field.help ? `<div class="help">${escapeHtml(field.help)}</div>` : "";
     const modeled = field._modeled ? `<span class="modeled-badge" title="Inferred — no real example to validate against">modeled</span>` : "";
     // Label flips per RequestType where the schema declares labelByType.
     const labelText = SCHEMA.labelFor(field, values);
 
     let control;
+    const reqAttr = required ? "required" : "";
     switch (field.type) {
       case "choice":
-        control = `<select id="${id}" data-field="${field.id}" ${field.required ? "required" : ""}>
+        control = `<select id="${id}" data-field="${field.id}" ${reqAttr}>
           <option value="">— select —</option>
           ${field.options.map((o) =>
             `<option value="${escapeAttr(o)}" ${cur === o ? "selected" : ""}>${escapeHtml(o)}</option>`).join("")}
         </select>`;
         break;
       case "textarea":
-        control = `<textarea id="${id}" data-field="${field.id}" rows="3" ${field.required ? "required" : ""}>${escapeHtml(cur)}</textarea>`;
+        control = `<textarea id="${id}" data-field="${field.id}" rows="3" ${reqAttr}>${escapeHtml(cur)}</textarea>`;
         break;
       case "currency":
-        control = `<input id="${id}" data-field="${field.id}" type="number" step="0.01" min="0" inputmode="decimal" value="${escapeAttr(cur)}" ${field.required ? "required" : ""}>`;
+        control = `<input id="${id}" data-field="${field.id}" type="number" step="0.01" min="0" inputmode="decimal" value="${escapeAttr(cur)}" ${reqAttr}>`;
         break;
       case "number":
-        control = `<input id="${id}" data-field="${field.id}" type="number" value="${escapeAttr(cur)}" ${field.required ? "required" : ""}>`;
+        control = `<input id="${id}" data-field="${field.id}" type="number" value="${escapeAttr(cur)}" ${reqAttr}>`;
         break;
       case "date":
-        control = `<input id="${id}" data-field="${field.id}" type="date" value="${escapeAttr(cur)}" ${field.required ? "required" : ""}>`;
+        control = `<input id="${id}" data-field="${field.id}" type="date" value="${escapeAttr(cur)}" ${reqAttr}>`;
         break;
       case "email":
-        control = `<input id="${id}" data-field="${field.id}" type="email" value="${escapeAttr(cur)}" autocomplete="email" ${field.required ? "required" : ""}>`;
+        control = `<input id="${id}" data-field="${field.id}" type="email" value="${escapeAttr(cur)}" autocomplete="email" ${reqAttr}>`;
         break;
       case "tel":
-        control = `<input id="${id}" data-field="${field.id}" type="tel" value="${escapeAttr(cur)}" autocomplete="tel" ${field.required ? "required" : ""}>`;
+        control = `<input id="${id}" data-field="${field.id}" type="tel" value="${escapeAttr(cur)}" autocomplete="tel" ${reqAttr}>`;
         break;
       case "file":
-        // Mobile-friendly camera capture on phones; falls back to file picker on desktop.
         control = `<div class="file-control">
             <input id="${id}" data-field="${field.id}" type="file" accept="image/*,application/pdf" capture="environment">
             <div class="help" id="${id}-name" style="display:none;"></div>
           </div>`;
         break;
+      case "boolean":
+        // Render as a checkbox with the label INSIDE the field block (not above as a separate <label>).
+        return `<div class="field" data-field-wrap="${field.id}" style="display:flex;align-items:flex-start;gap:8px;">
+          <input id="${id}" data-field="${field.id}" type="checkbox" ${cur ? "checked" : ""} style="margin-top:4px;">
+          <label for="${id}" style="font-weight:normal;cursor:pointer;">${escapeHtml(labelText)}${reqMark}${modeled}
+            ${field.help ? `<div class="help" style="margin-top:2px;">${escapeHtml(field.help)}</div>` : ""}
+          </label>
+        </div>`;
       default: // text
-        control = `<input id="${id}" data-field="${field.id}" type="text" value="${escapeAttr(cur)}" ${field.required ? "required" : ""}>`;
+        control = `<input id="${id}" data-field="${field.id}" type="text" value="${escapeAttr(cur)}" ${reqAttr}>`;
     }
     return `<div class="field" data-field-wrap="${field.id}">
       <label for="${id}">${escapeHtml(labelText)}${reqMark}${modeled}</label>
@@ -158,6 +167,11 @@
     });
   }
 
+  // Fields whose value affects other fields' visibility or required-ness.
+  // Re-render is ONLY triggered for these — typing in the Amount/Notes/Phone/etc.
+  // no longer reflows the whole form, which fixes the cursor-jump bug.
+  const GATING_FIELDS = SCHEMA.gatingFieldIds();
+
   function onFieldChange(e) {
     const fid = e.target.dataset.field;
     if (!fid) return;
@@ -184,10 +198,14 @@
       }
       return;
     }
-    values[fid] = e.target.value;
-    // If a value changed that gates visibility downstream, re-render.
-    // Cheap approach: any value change re-renders. Form is small so this is fine.
-    rerenderPreservingFocus(fid);
+    // Checkbox -> store as bool; text inputs -> store the value string
+    values[fid] = e.target.type === "checkbox" ? e.target.checked : e.target.value;
+    // Only re-render when the changed field gates downstream visibility or required-ness.
+    // For all other fields (Amount, Notes, addresses, phone, etc.) we leave the DOM alone,
+    // which preserves cursor position and avoids the typing-reverses-input bug.
+    if (GATING_FIELDS.has(fid)) {
+      rerenderPreservingFocus(fid);
+    }
   }
 
   function rerenderPreservingFocus(changedFieldId) {
@@ -210,8 +228,9 @@
   function validate() {
     const visible = SCHEMA.visibleFields(values);
     const missing = visible.filter((f) => {
-      if (!f.required) return false;
+      if (!SCHEMA.isRequired(f, values)) return false;
       const v = values[f.id];
+      if (f.type === "boolean") return false; // booleans default to false, never "missing"
       return v === undefined || v === null || String(v).trim() === "";
     });
     if (missing.length) {

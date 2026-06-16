@@ -115,10 +115,26 @@ const SCHEMA = (() => {
           when: { field: "VendorCardinality", equals: "Multiple Vendors" },
           help: "Quick description; attach a document below with the full list if needed.",
         },
-        { id: "PayeeAddress", label: "Street address", type: "text", required: false },
-        { id: "PayeeCity", label: "City", type: "text", required: false },
-        { id: "PayeeState", label: "State / Province", type: "text", required: false },
-        { id: "PayeeZip", label: "Zip", type: "text", required: false },
+        // Vendor address — required only for Check Request (we need to mail the check
+        // *somewhere*). Optional for Deposit (informational) and Credit Card Use.
+        { id: "PayeeAddress", label: "Street address", type: "text",
+          requiredWhen: { field: "RequestType", equals: "Check Request" } },
+        { id: "PayeeCity", label: "City", type: "text",
+          requiredWhen: { field: "RequestType", equals: "Check Request" } },
+        { id: "PayeeState", label: "State / Province", type: "text",
+          requiredWhen: { field: "RequestType", equals: "Check Request" } },
+        { id: "PayeeZip", label: "Zip", type: "text",
+          requiredWhen: { field: "RequestType", equals: "Check Request" } },
+        // "Send to a different address" toggle — Check only.
+        // When checked, reveals the AltPayee* fields below.
+        {
+          id: "DifferentMailingAddress",
+          label: "Send the check to a different address",
+          type: "boolean",
+          required: false,
+          when: { field: "RequestType", equals: "Check Request" },
+          help: "Check this if the check should be mailed somewhere other than the vendor address.",
+        },
       ],
     },
     {
@@ -163,16 +179,22 @@ const SCHEMA = (() => {
     },
     {
       id: "alternate_payee",
-      title: "Where to send the check",
-      help: "Skip if the check should go to the vendor address above.",
-      when: { field: "RequestType", equals: "Check Request" },
+      title: "Mailing address (different from vendor)",
+      help: "Where the physical check should be mailed.",
+      // Both gates: Check Request AND user toggled the "different address" checkbox.
+      when: { field: "DifferentMailingAddress", equals: true },
       fields: [
-        { id: "AltPayeeName", label: "Recipient name", type: "text", required: false,
-          help: "Who is the check made out to, if different from the vendor?" },
-        { id: "AltPayeeAddress", label: "Street address", type: "text", required: false },
-        { id: "AltPayeeCity", label: "City", type: "text", required: false },
-        { id: "AltPayeeState", label: "State / Province", type: "text", required: false },
-        { id: "AltPayeeZip", label: "Zip", type: "text", required: false },
+        { id: "AltPayeeName", label: "Recipient name", type: "text",
+          requiredWhen: { field: "DifferentMailingAddress", equals: true },
+          help: "Who the check is made out to / sent to." },
+        { id: "AltPayeeAddress", label: "Street address", type: "text",
+          requiredWhen: { field: "DifferentMailingAddress", equals: true } },
+        { id: "AltPayeeCity", label: "City", type: "text",
+          requiredWhen: { field: "DifferentMailingAddress", equals: true } },
+        { id: "AltPayeeState", label: "State / Province", type: "text",
+          requiredWhen: { field: "DifferentMailingAddress", equals: true } },
+        { id: "AltPayeeZip", label: "Zip", type: "text",
+          requiredWhen: { field: "DifferentMailingAddress", equals: true } },
       ],
     },
   ];
@@ -193,6 +215,32 @@ const SCHEMA = (() => {
     return field.label;
   }
 
+  // Resolve a field's required-ness given current form values.
+  // Honors both `required: true` and `requiredWhen: { field, equals }`.
+  function isRequired(field, values) {
+    if (field.required) return true;
+    const rw = field.requiredWhen;
+    if (!rw) return false;
+    const actual = values[rw.field];
+    if (Array.isArray(rw.equals)) return rw.equals.includes(actual);
+    return actual === rw.equals;
+  }
+
+  // Set of field IDs whose value-change should trigger a full re-render
+  // (because some other field's visibility/required-ness depends on them).
+  // Computed from all `when` and `requiredWhen` predicates across the schema.
+  function gatingFieldIds() {
+    const ids = new Set();
+    for (const sec of sections) {
+      if (sec.when) ids.add(sec.when.field);
+      for (const f of sec.fields) {
+        if (f.when) ids.add(f.when.field);
+        if (f.requiredWhen) ids.add(f.requiredWhen.field);
+      }
+    }
+    return ids;
+  }
+
   function visibleFields(values) {
     const out = [];
     for (const sec of sections) {
@@ -210,7 +258,9 @@ const SCHEMA = (() => {
     sections,
     isVisible,
     labelFor,
+    isRequired,
     visibleFields,
+    gatingFieldIds,
     enums,
     sourceSurveyId: 6743,
     sourceUrl: "https://evaa.sportngin.com/survey/show/6743",
