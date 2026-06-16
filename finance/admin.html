@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>EVAA Finance — Treasurer Console</title>
+
+  <link rel="stylesheet" href="../admin/css/styles.css" />
+  <link rel="stylesheet" href="./css/finance.css" />
+
+  <script src="https://unpkg.com/@azure/msal-browser@3.20.0/lib/msal-browser.min.js"></script>
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <div class="header-brand">
+        <img src="../admin/assets/logo.png" class="header-logo" alt="EVAA" onerror="this.style.display='none'" />
+        <h1>EVAA Finance — Treasurer Console</h1>
+      </div>
+      <div class="header-actions">
+        <span id="user-area" class="hidden">
+          <span id="user-name"></span>
+          <button id="sign-out-btn" class="btn-link">Sign out</button>
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section id="view-loading" class="view"><p id="loading-text">Loading…</p></section>
+
+    <section id="view-signin" class="view hidden">
+      <div class="card" style="max-width:520px; margin: 40px auto; text-align:center;">
+        <h2 style="margin-top:0;">Sign in to access the treasurer console</h2>
+        <p>Use your <strong>@evaasports.org</strong> account.</p>
+        <button id="sign-in-btn" class="btn-primary" disabled>Sign in with Microsoft</button>
+        <p id="signin-error" class="alert alert-error hidden"></p>
+      </div>
+    </section>
+
+    <section id="view-no-access" class="view hidden">
+      <div class="card" style="max-width:520px; margin: 40px auto; text-align:center;">
+        <h2 style="margin-top:0; color:#99202a;">No access</h2>
+        <p>This console is restricted to <strong>EVAA - Leadership</strong> members.
+           If you should have access, contact <a href="mailto:web-admin@evaasports.org">web-admin@evaasports.org</a>.</p>
+        <p>
+          <a href="./index.html" class="btn-primary" style="text-decoration:none;display:inline-block;">Submit a request instead</a>
+          <button id="signout-noaccess-btn" class="btn-link" style="margin-left:8px;">Sign out</button>
+        </p>
+      </div>
+    </section>
+
+    <section id="view-console" class="view hidden">
+      <div class="console-toolbar">
+        <label>Type
+          <select id="filter-type"><option value="">All</option></select>
+        </label>
+        <label>Status
+          <select id="filter-status">
+            <option value="">All</option>
+            <option value="Submitted">Submitted</option>
+            <option value="Under Review">Under Review</option>
+            <option value="Approved">Approved</option>
+            <option value="Paid/Deposited">Paid/Deposited</option>
+            <option value="Denied">Denied</option>
+            <option value="__open">Open (Submitted + Review + Approved)</option>
+          </select>
+        </label>
+        <label>Sport
+          <select id="filter-sport"><option value="">All</option></select>
+        </label>
+        <label>Search
+          <input id="filter-search" type="search" placeholder="requester, payee, notes…" />
+        </label>
+        <span class="spacer"></span>
+        <button id="refresh-btn" class="btn-secondary">Refresh</button>
+      </div>
+
+      <p id="result-summary" style="color:#6c7682; font-size:0.9em; margin: 4px 4px 12px;"></p>
+
+      <div class="console-table">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Requester</th>
+              <th>Type</th>
+              <th>Sport</th>
+              <th>Payee / Payer</th>
+              <th>Amount</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Detail drawer -->
+    <div id="detail-overlay" class="detail-overlay hidden">
+      <div class="detail-card">
+        <header>
+          <h2 id="detail-title">Request</h2>
+          <button id="detail-close" class="btn-link" style="color:#fff;">Close</button>
+        </header>
+        <div class="body" id="detail-body"></div>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    Eastview Athletic Association ·
+    <a href="./index.html" style="color:inherit;">Submit a request</a> ·
+    <a href="../admin/" style="color:inherit;">Admin portal</a>
+  </footer>
+
+  <script src="./js/auth.js"></script>
+  <script src="./js/graph.js"></script>
+  <script src="./js/schema.js"></script>
+  <script src="./js/admin-app.js"></script>
+</body>
+</html>

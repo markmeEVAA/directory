@@ -1,0 +1,192 @@
+/* EVAA Finance Portal — supplemental styles
+   Inherits the base look from /admin/css/styles.css (linked first in HTML).
+   This file adds the form-specific bits the admin portal doesn't have. */
+
+.finance-form {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  padding: 24px;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.finance-form h2 {
+  margin: 0 0 4px 0;
+  color: #1B4F8C;
+  font-size: 1.1em;
+}
+.finance-form h2 + .section-help {
+  color: #666;
+  font-size: 0.9em;
+  margin: 0 0 14px 0;
+}
+
+.finance-form .section {
+  border-top: 1px solid #e5ecf3;
+  padding: 20px 0 12px;
+}
+.finance-form .section:first-of-type {
+  border-top: none;
+  padding-top: 4px;
+}
+
+.finance-form label {
+  display: block;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 4px;
+}
+.finance-form label .req {
+  color: #b40000;
+  margin-left: 2px;
+}
+.finance-form .field {
+  margin-bottom: 14px;
+}
+.finance-form .field .help {
+  color: #6c7682;
+  font-size: 0.85em;
+  margin-top: 4px;
+}
+
+.finance-form input[type="text"],
+.finance-form input[type="email"],
+.finance-form input[type="tel"],
+.finance-form input[type="date"],
+.finance-form input[type="number"],
+.finance-form select,
+.finance-form textarea {
+  width: 100%;
+  padding: 9px 10px;
+  font-size: 14px;
+  font-family: inherit;
+  border: 1px solid #c8d3e0;
+  border-radius: 4px;
+  background: #fff;
+}
+.finance-form input:focus, .finance-form select:focus, .finance-form textarea:focus {
+  outline: 2px solid #1B4F8C;
+  outline-offset: -1px;
+  border-color: #1B4F8C;
+}
+.finance-form textarea { min-height: 80px; resize: vertical; }
+
+/* File input — make it look intentional on mobile */
+.finance-form .file-control {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.finance-form input[type="file"] {
+  font-size: 14px;
+  padding: 8px;
+  border: 1px dashed #c8d3e0;
+  border-radius: 4px;
+  background: #f8fafd;
+}
+
+/* Form actions footer */
+.finance-form .actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 18px;
+  border-top: 1px solid #e5ecf3;
+  padding-top: 18px;
+}
+
+/* Status pills (treasurer console) */
+.status-pill {
+  display: inline-block;
+  font-size: 0.8em;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 11px;
+  border: 1px solid currentColor;
+}
+.status-Submitted    { color: #1B4F8C; background: #e8f0fa; }
+.status-UnderReview  { color: #8a5a00; background: #fff4dc; }
+.status-Approved     { color: #226b1f; background: #e3f5e1; }
+.status-PaidDeposited{ color: #226b1f; background: #d6efd4; }
+.status-Denied       { color: #99202a; background: #fbe2e4; }
+
+.console-toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.console-toolbar .spacer { flex: 1; }
+.console-toolbar select, .console-toolbar input[type="search"] {
+  padding: 6px 10px;
+  font-size: 14px;
+  border: 1px solid #c8d3e0;
+  border-radius: 4px;
+}
+
+.console-table {
+  background: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.console-table table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.console-table th, .console-table td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid #eef2f7;
+}
+.console-table th { background: #f5f8fc; color: #555; font-weight: 600; font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.04em; }
+.console-table tr:hover td { background: #fafcfe; cursor: pointer; }
+
+/* Detail drawer / modal */
+.detail-overlay {
+  position: fixed; inset: 0;
+  background: rgba(11,29,53,0.45);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 60px 16px 16px;
+  z-index: 100;
+}
+.detail-overlay.hidden { display: none; }
+.detail-card {
+  background: #fff;
+  border-radius: 8px;
+  max-width: 760px;
+  width: 100%;
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+}
+.detail-card header {
+  background: #1B4F8C; color: #fff;
+  padding: 14px 20px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.detail-card header h2 { margin: 0; font-size: 1.1em; }
+.detail-card .body { padding: 20px; }
+.detail-card .row { display: grid; grid-template-columns: 180px 1fr; gap: 8px 14px; margin-bottom: 6px; }
+.detail-card .row .k { color: #6c7682; font-size: 0.9em; }
+.detail-card .row .v { color: #222; }
+.detail-card .status-workflow { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0; }
+.detail-card .status-workflow button { padding: 8px 14px; }
+
+/* Toast / inline alerts */
+.alert { padding: 10px 14px; border-radius: 6px; margin: 12px 0; font-size: 0.95em; }
+.alert-ok    { background: #e3f5e1; color: #226b1f; border: 1px solid #c4e1c0; }
+.alert-error { background: #fbe2e4; color: #99202a; border: 1px solid #f0c2c5; }
+.alert-info  { background: #e8f0fa; color: #1B4F8C; border: 1px solid #c9dff5; }
+
+/* Modeled-field marker — small grey badge so Mark can spot the inferred Credit Card fields */
+.modeled-badge {
+  display: inline-block;
+  font-size: 0.7em;
+  color: #888;
+  background: #f0f0f0;
+  border-radius: 3px;
+  padding: 1px 6px;
+  margin-left: 8px;
+  vertical-align: middle;
+  letter-spacing: 0.02em;
+}
