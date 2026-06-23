@@ -1645,6 +1645,21 @@
     }
   }
 
+  // Build the directory display name with the org/sport suffix every other account
+  // uses, e.g. "Jane Doe (EVAA Soccer)" or "Jane Doe (AV Fusion)". Fusion accounts
+  // (avfusion.org) carry the org label; EVAA accounts carry "EVAA <Sport>" derived
+  // from the group they're added to (same stripGroupPrefix token used for job titles).
+  function buildUserDisplayName(first, last, domain, groupName) {
+    let suffix;
+    if (domain === "avfusion.org") {
+      suffix = "AV Fusion";
+    } else {
+      const sport = stripGroupPrefix(groupName).trim();
+      suffix = sport ? `EVAA ${sport}` : "EVAA";
+    }
+    return `${first} ${last} (${suffix})`;
+  }
+
   // Toggle the "Other" custom-role input when "Other" is picked
   $("cu-role").addEventListener("change", () => {
     const isOther = $("cu-role").value === "Other";
@@ -1706,7 +1721,7 @@
     let newUserId;
     try {
       const created = await GRAPH.createUser({
-        displayName: `${first} ${last}`,
+        displayName: buildUserDisplayName(first, last, domain, groupName),
         givenName: first,
         surname: last,
         userPrincipalName: upn,
