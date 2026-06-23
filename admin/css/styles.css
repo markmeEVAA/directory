@@ -689,6 +689,75 @@ td a:hover { text-decoration: underline; }
 }
 .checkbox-label input { width: auto; }
 
+/* ---- Create group: name/email preview, pickers, selected-person chips ---- */
+.cg-preview {
+  margin: -4px 0 0;
+  font-size: 0.9em;
+}
+.cg-preview strong { color: #1B4F8C; }
+.cg-warn {
+  background: #fff7e6;
+  border: 1px solid #f0c36d;
+  border-radius: 4px;
+  padding: 8px 10px;
+  font-size: 0.85em;
+  color: #7a5b00;
+}
+.cg-picker {
+  border: 1px solid #c5cee0;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin: 0;
+}
+.cg-picker legend {
+  font-weight: 600;
+  font-size: 0.9em;
+  padding: 0 6px;
+  color: #1B4F8C;
+}
+.cg-search {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #c5cee0;
+  border-radius: 4px;
+  font-size: 0.95em;
+}
+.cg-search:focus {
+  outline: none;
+  border-color: #1B4F8C;
+  box-shadow: 0 0 0 2px rgba(27,79,140,0.15);
+}
+.cg-results { max-height: 200px; }
+.cg-results:empty { display: none; }
+.cg-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.cg-chips:empty { display: none; }
+.user-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #e9f0fa;
+  border: 1px solid #b9cdec;
+  border-radius: 14px;
+  padding: 3px 6px 3px 12px;
+  font-size: 0.88em;
+  color: #1B4F8C;
+}
+.user-chip button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #1B4F8C;
+  font-size: 1.1em;
+  line-height: 1;
+  padding: 0 2px;
+}
+.user-chip button:hover { color: #c44; }
+
 .modal-divider {
   text-align: center;
   color: #999;

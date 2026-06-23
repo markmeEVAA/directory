@@ -1788,6 +1788,254 @@
   });
 
   // =====================================================================
+  // CREATE GROUP (admin-only) — new Microsoft 365 / Unified group, the same
+  // type as the "EVAA - <Sport>" board groups. Owner + member pickers reuse
+  // GRAPH.searchUsers. Handles Graph replication lag (gotcha #4) by adding the
+  // new group to the local list optimistically rather than re-listing.
+  // =====================================================================
+
+  let createGroupMe = null; // cached GRAPH.getMe() for the signed-in admin
+
+  // Reusable people-picker: type to search (GRAPH.searchUsers), click a result to
+  // add a chip, × to remove. Returns { ids(), reset(), has() }. Selected users are
+  // kept in an insertion-ordered Map keyed by user id.
+  function makeUserPicker(searchId, resultsId, chipsId) {
+    const selected = new Map(); // id -> { id, displayName, mail }
+    let debounce;
+
+    function renderChips() {
+      const wrap = $(chipsId);
+      wrap.innerHTML = [...selected.values()].map((u) => `
+        <span class="user-chip">${escapeHtml(u.displayName)}<button type="button" data-remove="${escapeHtml(u.id)}" aria-label="Remove ${escapeHtml(u.displayName)}">×</button></span>
+      `).join("");
+      wrap.querySelectorAll("button[data-remove]").forEach((b) =>
+        b.addEventListener("click", () => { selected.delete(b.dataset.remove); renderChips(); })
+      );
+    }
+
+    function renderResults(users) {
+      const container = $(resultsId);
+      const fresh = users.filter((u) => !selected.has(u.id));
+      if (!fresh.length) { container.innerHTML = `<p class="muted">No more matching users.</p>`; return; }
+      container.innerHTML = fresh.map((u) => `<button type="button" class="user-result" data-user-id="${escapeHtml(u.id)}" data-name="${escapeHtml(u.displayName)}" data-mail="${escapeHtml(u.mail || u.userPrincipalName || "")}">
+        <span class="user-name">${escapeHtml(u.displayName)}</span>
+        <span class="user-mail muted">${escapeHtml(u.mail || u.userPrincipalName || "")}</span>
+      </button>`).join("");
+      container.querySelectorAll(".user-result").forEach((btn) => btn.addEventListener("click", () => {
+        selected.set(btn.dataset.userId, { id: btn.dataset.userId, displayName: btn.dataset.name, mail: btn.dataset.mail });
+        $(searchId).value = "";
+        container.innerHTML = "";
+        renderChips();
+        $(searchId).focus();
+      }));
+    }
+
+    $(searchId).addEventListener("input", (e) => {
+      const q = e.target.value.trim();
+      clearTimeout(debounce);
+      if (q.length < 2) { $(resultsId).innerHTML = ""; return; }
+      debounce = setTimeout(async () => {
+        try { renderResults(await GRAPH.searchUsers(q)); }
+        catch (err) { showError("Search failed: " + err.message); }
+      }, 250);
+    });
+
+    return {
+      ids: () => [...selected.keys()],
+      values: () => [...selected.values()],
+      reset: () => { selected.clear(); $(searchId).value = ""; $(resultsId).innerHTML = ""; renderChips(); },
+      has: (id) => selected.has(id),
+    };
+  }
+
+  const cgOwnerPicker = makeUserPicker("cg-owner-search", "cg-owner-results", "cg-owner-chips");
+  const cgMemberPicker = makeUserPicker("cg-member-search", "cg-member-results", "cg-member-chips");
+
+  // Strip a leading "EVAA -" the admin might type, then build the canonical pieces.
+  function cgComputeNames() {
+    const raw = $("cg-name").value.trim().replace(/^EVAA\s*-\s*/i, "").trim();
+    const domain = $("cg-domain").value;
+    const mailNickname = raw.toLowerCase().replace(/[^a-z0-9]+/g, "");
+    const displayName = raw ? `EVAA - ${raw}` : "";
+    return { raw, domain, mailNickname, displayName, mail: mailNickname ? `${mailNickname}@${domain}` : "" };
+  }
+
+  function cgRefreshPreview() {
+    const { raw, mailNickname, displayName, mail } = cgComputeNames();
+    const preview = $("cg-preview");
+    if (!raw) { preview.innerHTML = ""; return; }
+    // Soft collision check against already-loaded groups (by name or email local-part).
+    const localPart = mail.split("@")[0];
+    const clash = state.groups.find((g) =>
+      (g.displayName || "").toLowerCase() === displayName.toLowerCase() ||
+      (g.mail || "").toLowerCase().split("@")[0] === localPart
+    );
+    let html = `Will create <strong>${escapeHtml(displayName)}</strong> · <strong>${escapeHtml(mail)}</strong>`;
+    if (!mailNickname) html += ` <span class="cg-warn">— name must contain at least one letter or number</span>`;
+    else if (clash) html += `<br><span class="cg-warn">⚠ A group named "${escapeHtml(clash.displayName)}"${clash.mail ? ` (${escapeHtml(clash.mail)})` : ""} already exists — pick a different name.</span>`;
+    preview.innerHTML = html;
+  }
+
+  $("cg-name").addEventListener("input", cgRefreshPreview);
+  $("cg-domain").addEventListener("change", () => {
+    cgRefreshPreview();
+    $("cg-fusion-note").classList.toggle("hidden", $("cg-domain").value !== "avfusion.org");
+  });
+
+  async function openCreateGroupPanel() {
+    $("create-group-form").reset();
+    $("cg-domain").value = "evaasports.org";
+    $("cg-add-me-owner").checked = true;
+    $("cg-fusion-note").classList.add("hidden");
+    $("cg-preview").innerHTML = "";
+    cgOwnerPicker.reset();
+    cgMemberPicker.reset();
+    $("create-group-progress").classList.add("hidden");
+    $("create-group-result").classList.add("hidden");
+    $("create-group-form").classList.remove("hidden");
+    $("create-group-panel").classList.remove("hidden");
+    $("cg-name").focus();
+    // Cache who "me" is for the "add me as owner" option (best-effort).
+    if (!createGroupMe) { try { createGroupMe = await GRAPH.getMe(); } catch { /* non-fatal */ } }
+  }
+  function closeCreateGroupPanel() { $("create-group-panel").classList.add("hidden"); }
+
+  $("create-group-btn").addEventListener("click", openCreateGroupPanel);
+  $("create-group-close").addEventListener("click", closeCreateGroupPanel);
+  $("create-group-cancel").addEventListener("click", closeCreateGroupPanel);
+
+  // Retry a Graph write through new-group replication lag (gotcha #4): a follow-up
+  // write right after POST /groups can 404 for a few seconds. Backs off and retries.
+  async function retryThroughLag(fn, attempts = 4) {
+    for (let i = 0; i < attempts; i++) {
+      try { return await fn(); }
+      catch (err) {
+        const transient = /\b404\b|does not exist|Request_ResourceNotFound|ResourceNotFound/i.test(err.message || "");
+        if (!transient || i === attempts - 1) throw err;
+        await new Promise((r) => setTimeout(r, 1500 * (i + 1)));
+      }
+    }
+  }
+
+  $("create-group-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const { raw, domain, mailNickname, displayName, mail } = cgComputeNames();
+    const description = $("cg-description").value.trim();
+    if (!mailNickname) { showError("Group name must contain at least one letter or number."); return; }
+
+    // Block on a name/email collision with an already-loaded group.
+    const localPart = mail.split("@")[0];
+    if (state.groups.some((g) =>
+      (g.displayName || "").toLowerCase() === displayName.toLowerCase() ||
+      (g.mail || "").toLowerCase().split("@")[0] === localPart)) {
+      showError(`A group named "${displayName}" (or ${mail}) already exists.`);
+      return;
+    }
+
+    const addMe = $("cg-add-me-owner").checked && createGroupMe?.id;
+    const ownerVals = cgOwnerPicker.values();
+    const memberVals = cgMemberPicker.values();
+    const ownerIds = [...new Set([...(addMe ? [createGroupMe.id] : []), ...cgOwnerPicker.ids()])];
+    const memberIds = cgMemberPicker.ids();
+
+    // Confirm
+    const fmt = (vals) => vals.length ? vals.map((u) => escapeHtml(u.displayName)).join(", ") : "<em>none</em>";
+    const ownerLine = [addMe ? `${escapeHtml(createGroupMe.displayName || "you")} (you)` : null]
+      .filter(Boolean).concat(ownerVals.map((u) => escapeHtml(u.displayName))).join(", ") || "<em>none</em>";
+    const ok = await confirmCustom({
+      title: "Create group?",
+      body: `<p>Create a new Microsoft 365 group:</p>
+        <ul style="margin:8px 0; padding-left:20px; line-height:1.6;">
+          <li><strong>${escapeHtml(displayName)}</strong></li>
+          <li>Email: <strong>${escapeHtml(mail)}</strong></li>
+          ${description ? `<li>Description: ${escapeHtml(description)}</li>` : ""}
+          <li>Owners: ${ownerLine}</li>
+          <li>Members: ${fmt(memberVals)}</li>
+        </ul>
+        ${domain === "avfusion.org" ? `<p class="cg-warn">avfusion.org provisioning is still pending — the primary address may default to the tenant domain until Exchange is configured.</p>` : ""}
+        <p class="muted">This group can own a send-locked email list. You can adjust owners/members afterward.</p>`,
+      okLabel: "Create group",
+      okClass: "btn-primary",
+    });
+    if (!ok) return;
+
+    const form = $("create-group-form");
+    const progress = $("create-group-progress");
+    const result = $("create-group-result");
+    form.classList.add("hidden");
+    progress.classList.remove("hidden");
+    progress.innerHTML = `<p class="loading">Creating ${escapeHtml(displayName)}…</p><ul id="cg-steps"></ul>`;
+    const stepsEl = $("cg-steps");
+    const stepLog = (msg, okStep) => stepsEl.insertAdjacentHTML("beforeend", `<li class="${okStep ? "step-ok" : "step-err"}">${okStep ? "✓" : "✗"} ${escapeHtml(msg)}</li>`);
+
+    let created;
+    try {
+      created = await GRAPH.createGroup({ displayName, mailNickname, description, ownerIds, memberIds });
+      stepLog(`Group created (${created.mail || mail})`, true);
+    } catch (err) {
+      stepLog(`Create group failed: ${err.message}`, false);
+      progress.classList.add("hidden");
+      form.classList.remove("hidden");
+      showError(`Group creation failed: ${err.message}`);
+      return;
+    }
+
+    // Overflow: Graph binds at most 20 owners/members on create. Add the rest now
+    // (retry through replication lag). Realistically rare for board groups.
+    const extraOwners = ownerIds.slice(20);
+    const extraMembers = memberIds.slice(20);
+    for (const id of extraOwners) {
+      try { await retryThroughLag(() => GRAPH.addOwner(created.id, id)); } catch (err) { stepLog(`Add extra owner failed: ${err.message}`, false); }
+    }
+    for (const id of extraMembers) {
+      try { await retryThroughLag(() => GRAPH.addMember(created.id, id)); } catch (err) { stepLog(`Add extra member failed: ${err.message}`, false); }
+    }
+    if (extraOwners.length || extraMembers.length) stepLog(`Added ${extraOwners.length + extraMembers.length} additional people`, true);
+
+    // If the admin opted OUT of ownership, delegated create still auto-adds the
+    // creator as an owner — best-effort remove them (through replication lag).
+    if (!addMe && createGroupMe?.id) {
+      try {
+        await retryThroughLag(() => GRAPH.removeOwner(created.id, createGroupMe.id));
+        stepLog(`Removed you from owners (per your choice)`, true);
+      } catch { /* leave as-is; admin can remove later in the group detail view */ }
+    }
+
+    // Audit (maps to "Other" in the SP ActionType choice set — no CreateGroup choice
+    // exists; the group name + detail land in TargetGroup/Notes).
+    logAction("created group", displayName, created.id, {
+      group: displayName, mail: created.mail || mail, domain,
+      owners: ownerIds.length, members: memberIds.length,
+    });
+
+    // Optimistic insert — a just-created group is not yet listable (gotcha #4),
+    // so add it to local state directly instead of re-listing.
+    if (!state.groups.some((g) => g.id === created.id)) {
+      state.groups.push({
+        id: created.id,
+        displayName: created.displayName || displayName,
+        mail: created.mail || mail,
+        groupTypes: ["Unified"],
+        description: created.description || description,
+      });
+    }
+    state.ownerCounts.set(created.id, ownerIds.length);
+    renderGroupsTable();
+
+    progress.classList.add("hidden");
+    result.classList.remove("hidden");
+    result.innerHTML = `<h4>✓ Group created</h4>
+      <p class="success-note"><strong>${escapeHtml(created.displayName || displayName)}</strong> · <code>${escapeHtml(created.mail || mail)}</code></p>
+      <p class="muted">It may take a minute to appear everywhere in Microsoft 365. Open it from the groups list to manage owners and members.</p>
+      <div class="modal-actions"><button id="cg-done" class="btn-primary">Done</button></div>`;
+    $("cg-done").addEventListener("click", () => {
+      closeCreateGroupPanel();
+      if (activeTab === "groups") { show("groups"); renderGroupsTable(); }
+    });
+    showToast(`Group "${created.displayName || displayName}" created`);
+  });
+
+  // =====================================================================
   // RESET PASSWORD tab — admin path: direct Graph PATCH + send email
   // Owner path: send admin notification email; no flow involvement
   // =====================================================================

@@ -124,6 +124,36 @@ const GRAPH = (() => {
     return r.value || [];
   }
 
+  // Create a new M365 (Unified) group — mail-enabled, security-disabled. This is the
+  // SAME type as the "EVAA - <Sport>" board-director groups (they get a mailbox +
+  // SharePoint and can own/send-lock an email list, per EMAIL-LISTS.md). Returns the
+  // created group object (id, displayName, mail, mailNickname, …).
+  //
+  // owners/members are passed inline via @odata.bind so the group is never ownerless,
+  // even for an instant (Graph caps each bind array at 20 on create — callers add any
+  // overflow afterward via addOwner/addMember). NOTE: a just-created group is subject to
+  // replication lag — it is NOT immediately listable via listManagedGroups and a follow-up
+  // write (addOwner/removeOwner) may 404 for a few seconds (see EMAIL-LISTS.md gotcha #4).
+  // Callers should optimistically add the returned object to their local list and retry
+  // any follow-up writes with backoff.
+  async function createGroup({ displayName, mailNickname, description, ownerIds = [], memberIds = [] }) {
+    const bind = (id) => `https://graph.microsoft.com/v1.0/directoryObjects/${id}`;
+    const body = {
+      displayName,
+      mailNickname,
+      groupTypes: ["Unified"],
+      mailEnabled: true,
+      securityEnabled: false,
+    };
+    if (description) body.description = description;
+    // Dedupe ids; Graph rejects a bind array with duplicate references.
+    const owners = [...new Set(ownerIds)].slice(0, 20);
+    const members = [...new Set(memberIds)].slice(0, 20);
+    if (owners.length) body["owners@odata.bind"] = owners.map(bind);
+    if (members.length) body["members@odata.bind"] = members.map(bind);
+    return callGraph("/groups", { method: "POST", body: JSON.stringify(body) });
+  }
+
   // Owner ops
   async function addOwner(groupId, userId) {
     return callGraph(`/groups/${groupId}/owners/$ref`, {
@@ -452,6 +482,7 @@ const GRAPH = (() => {
     listGroupOwners,
     listAllManagedUsers,
     searchUsers,
+    createGroup,
     addOwner, removeOwner,
     addMember, removeMember,
     getUserMemberOf,

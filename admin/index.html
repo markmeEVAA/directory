@@ -122,6 +122,7 @@
       <div class="toolbar">
         <input type="search" id="group-filter" placeholder="Filter groups by name…" />
         <span id="groups-count" class="muted"></span>
+        <button id="create-group-btn" class="btn-secondary cu-admin-only">+ Create group</button>
       </div>
       <div id="groups-list-container">
         <table id="groups-table">
@@ -488,6 +489,63 @@
         </form>
         <div id="create-user-progress" class="hidden create-user-progress"></div>
         <div id="create-user-result" class="hidden create-user-result"></div>
+      </div>
+    </div>
+
+    <!-- Create group (admin-only): creates a Microsoft 365 / Unified group, the same
+         type as the "EVAA - <Sport>" board-director groups (can own an email list). -->
+    <div id="create-group-panel" class="modal-overlay hidden">
+      <div class="modal-card create-user-card">
+        <div class="modal-header">
+          <h3>Create group</h3>
+          <button id="create-group-close" class="modal-close" aria-label="Close">×</button>
+        </div>
+        <p class="muted">Creates a Microsoft 365 group (mail-enabled, with SharePoint) — the same type as the existing <strong>EVAA&nbsp;-&nbsp;&lt;Sport&gt;</strong> board groups, so it can own a send-locked email list.</p>
+        <form id="create-group-form" class="create-user-form">
+          <label>
+            <span>Group name * <span class="hint">(the part after "EVAA - ")</span></span>
+            <input type="text" id="cg-name" required autocomplete="off" placeholder="e.g. Pickleball" />
+          </label>
+          <label>
+            <span>Email domain</span>
+            <select id="cg-domain">
+              <option value="evaasports.org">@evaasports.org</option>
+              <option value="avfusion.org">@avfusion.org</option>
+            </select>
+          </label>
+          <p id="cg-preview" class="cg-preview muted"></p>
+          <p id="cg-fusion-note" class="hidden cg-warn">Heads-up: the <strong>avfusion.org</strong> domain provisioning is still pending (see EMAIL-LISTS.md). The group's primary address may land on the tenant default domain until Exchange is configured for Fusion.</p>
+          <label>
+            <span>Description <span class="hint">(optional)</span></span>
+            <input type="text" id="cg-description" autocomplete="off" placeholder="e.g. Pickleball board / directors" />
+          </label>
+
+          <fieldset class="cg-picker">
+            <legend>Owners (directors) <span class="hint">— who manages this group</span></legend>
+            <div class="cg-chips" id="cg-owner-chips"></div>
+            <input type="text" id="cg-owner-search" class="cg-search" autocomplete="off" placeholder="Search people to add as owner…" />
+            <div id="cg-owner-results" class="search-results cg-results"></div>
+          </fieldset>
+
+          <fieldset class="cg-picker">
+            <legend>Members <span class="hint">— optional</span></legend>
+            <div class="cg-chips" id="cg-member-chips"></div>
+            <input type="text" id="cg-member-search" class="cg-search" autocomplete="off" placeholder="Search people to add as member…" />
+            <div id="cg-member-results" class="search-results cg-results"></div>
+          </fieldset>
+
+          <label class="checkbox-label">
+            <input type="checkbox" id="cg-add-me-owner" checked />
+            Add me (the creating admin) as an owner
+          </label>
+
+          <div class="modal-actions">
+            <button type="button" id="create-group-cancel" class="btn-link">Cancel</button>
+            <button type="submit" id="create-group-submit" class="btn-primary">Create group</button>
+          </div>
+        </form>
+        <div id="create-group-progress" class="hidden create-user-progress"></div>
+        <div id="create-group-result" class="hidden create-user-result"></div>
       </div>
     </div>
 
