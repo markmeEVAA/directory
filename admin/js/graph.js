@@ -154,6 +154,17 @@ const GRAPH = (() => {
     return callGraph("/groups", { method: "POST", body: JSON.stringify(body) });
   }
 
+  // Generic group-field update. Used by the inline rename on the group detail view.
+  // patch is a partial group object, e.g. { displayName: "EVAA - Travel Soccer" }.
+  // Note: this changes the friendly displayName only — it does NOT change the group's
+  // mailNickname / primary email address (that's an Exchange operation).
+  async function updateGroup(groupId, patch) {
+    return callGraph(`/groups/${groupId}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    });
+  }
+
   // Owner ops
   async function addOwner(groupId, userId) {
     return callGraph(`/groups/${groupId}/owners/$ref`, {
@@ -483,6 +494,7 @@ const GRAPH = (() => {
     listAllManagedUsers,
     searchUsers,
     createGroup,
+    updateGroup,
     addOwner, removeOwner,
     addMember, removeMember,
     getUserMemberOf,

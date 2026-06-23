@@ -357,6 +357,37 @@
     renderGroupsTable(); // refresh cached owner counts that may have changed
   });
 
+  // Rename group (admin-only) — edits the friendly displayName via Graph PATCH.
+  // The email address (mailNickname) is unchanged; only the display name moves.
+  async function editGroupName() {
+    if (role !== "admin" || !currentDetailGroup) return;
+    const current = currentDetailGroup.displayName || "";
+    const ok = await confirmCustom({
+      title: "Rename group",
+      body: `<p>Edit this group's display name. This changes the friendly name only — the email address (<strong>${escapeHtml(currentDetailGroup.mail || "—")}</strong>) stays the same.</p>
+        <input type="text" id="edit-group-name-input" class="inline-edit-input" style="width:100%;" value="${escapeHtml(current)}" />`,
+      okLabel: "Save",
+      okClass: "btn-primary",
+    });
+    if (!ok) return;
+    const newName = ($("edit-group-name-input").value || "").trim();
+    if (!newName || newName === current) return; // no-op on empty or unchanged
+
+    try {
+      await GRAPH.updateGroup(currentDetailGroup.id, { displayName: newName });
+      currentDetailGroup.displayName = newName;
+      const g = state.groups.find((x) => x.id === currentDetailGroup.id);
+      if (g) g.displayName = newName;
+      $("group-detail-name").textContent = newName;
+      renderGroupsTable();
+      logAction("renamed group", newName, currentDetailGroup.id, { group: newName, previousName: current });
+      showToast(`Group renamed to "${newName}"`);
+    } catch (err) {
+      showError(`Rename failed: ${err.message}`);
+    }
+  }
+  $("edit-group-name-btn").addEventListener("click", editGroupName);
+
   // ---- Phase 2.1: Add/Remove directors + members ----
 
   // Smart remove: open the confirm modal with per-group vs full-offboard options.

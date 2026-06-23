@@ -689,6 +689,14 @@ td a:hover { text-decoration: underline; }
 }
 .checkbox-label input { width: auto; }
 
+/* Group detail header — name + inline edit (✎) button side by side */
+.group-name-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.group-name-header h2 { margin-bottom: 4px; }
+
 /* ---- Create group: name/email preview, pickers, selected-person chips ---- */
 .cg-preview {
   margin: -4px 0 0;
