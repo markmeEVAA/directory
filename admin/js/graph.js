@@ -154,6 +154,19 @@ const GRAPH = (() => {
     return callGraph("/groups", { method: "POST", body: JSON.stringify(body) });
   }
 
+  // The connected SharePoint team-site URL for a Unified group, e.g.
+  // "https://evaasports.sharepoint.com/sites/soccertravel". Returns null if the site
+  // isn't provisioned yet (a just-created group lags) or the caller lacks access —
+  // callers should treat null as "no link to show" rather than an error.
+  async function getGroupSiteUrl(groupId) {
+    try {
+      const site = await callGraph(`/groups/${groupId}/sites/root?$select=webUrl`);
+      return site && site.webUrl ? site.webUrl : null;
+    } catch {
+      return null;
+    }
+  }
+
   // Generic group-field update. Used by the inline rename on the group detail view.
   // patch is a partial group object, e.g. { displayName: "EVAA - Travel Soccer" }.
   // Note: this changes the friendly displayName only — it does NOT change the group's
@@ -495,6 +508,7 @@ const GRAPH = (() => {
     searchUsers,
     createGroup,
     updateGroup,
+    getGroupSiteUrl,
     addOwner, removeOwner,
     addMember, removeMember,
     getUserMemberOf,

@@ -318,8 +318,27 @@
     $("members-tbody").innerHTML = `<tr><td colspan="4" class="loading">Loading…</td></tr>`;
     $("owners-count").textContent = "";
     $("members-count").textContent = "";
+    loadSharePointLink(g); // async, populates the header link when ready
     show("groupDetail");
     await refreshDetail();
+  }
+
+  // Populate the "SharePoint Link for Group" note in the detail header. The href is the
+  // group's connected team-site (https://evaasports.sharepoint.com/sites/<name>); the
+  // visible text is the path after the host, per the EVAA standard. Hidden when the site
+  // isn't provisioned yet (just-created groups lag) or the user can't see it.
+  async function loadSharePointLink(group) {
+    const wrap = $("group-sharepoint");
+    const link = $("group-sharepoint-link");
+    wrap.classList.add("hidden");
+    link.textContent = "";
+    link.removeAttribute("href");
+    const webUrl = await GRAPH.getGroupSiteUrl(group.id);
+    // Guard against a late response after the user navigated to a different group.
+    if (!webUrl || !currentDetailGroup || currentDetailGroup.id !== group.id) return;
+    link.href = webUrl;
+    link.textContent = webUrl.replace(/^https?:\/\/[^/]+\//i, "") || webUrl;
+    wrap.classList.remove("hidden");
   }
 
   async function refreshDetail() {
@@ -2017,7 +2036,6 @@
     let created;
     try {
       created = await GRAPH.createGroup({ displayName, mailNickname, description, ownerIds, memberIds });
-      stepLog(`Group created (${created.mail || mail})`, true);
     } catch (err) {
       stepLog(`Create group failed: ${err.message}`, false);
       progress.classList.add("hidden");
@@ -2025,6 +2043,12 @@
       showError(`Group creation failed: ${err.message}`);
       return;
     }
+    // POST /groups returns the transient @onmicrosoft.com alias before Exchange applies
+    // the real primary — which lands on the tenant default domain (evaasports.org), the
+    // same as every other group. Always surface the .org address, never the onmicrosoft one.
+    const settledMail = `${mailNickname}@evaasports.org`;
+    const displayMail = (created.mail && !/onmicrosoft\.com$/i.test(created.mail)) ? created.mail : settledMail;
+    stepLog(`Group created (${displayMail})`, true);
 
     // Overflow: Graph binds at most 20 owners/members on create. Add the rest now
     // (retry through replication lag). Realistically rare for board groups.
@@ -2050,7 +2074,7 @@
     // Audit (maps to "Other" in the SP ActionType choice set — no CreateGroup choice
     // exists; the group name + detail land in TargetGroup/Notes).
     logAction("created group", displayName, created.id, {
-      group: displayName, mail: created.mail || mail, domain,
+      group: displayName, mail: displayMail, domain,
       owners: ownerIds.length, members: memberIds.length,
     });
 
@@ -2060,7 +2084,7 @@
       state.groups.push({
         id: created.id,
         displayName: created.displayName || displayName,
-        mail: created.mail || mail,
+        mail: displayMail,
         groupTypes: ["Unified"],
         description: created.description || description,
       });
@@ -2071,7 +2095,7 @@
     progress.classList.add("hidden");
     result.classList.remove("hidden");
     result.innerHTML = `<h4>✓ Group created</h4>
-      <p class="success-note"><strong>${escapeHtml(created.displayName || displayName)}</strong> · <code>${escapeHtml(created.mail || mail)}</code></p>
+      <p class="success-note"><strong>${escapeHtml(created.displayName || displayName)}</strong> · <code>${escapeHtml(displayMail)}</code></p>
       <p class="muted">It may take a minute to appear everywhere in Microsoft 365. Open it from the groups list to manage owners and members.</p>
       <div class="modal-actions"><button id="cg-done" class="btn-primary">Done</button></div>`;
     $("cg-done").addEventListener("click", () => {

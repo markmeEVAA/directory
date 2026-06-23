@@ -696,6 +696,28 @@ td a:hover { text-decoration: underline; }
   gap: 8px;
 }
 .group-name-header h2 { margin-bottom: 4px; }
+/* SharePoint link note — sits in the blank space to the right of the group name */
+.group-sp {
+  margin-left: auto;
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 50%;
+}
+.group-sp-label {
+  font-size: 0.75em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6b7686;
+  font-weight: 600;
+}
+.group-sp-link {
+  font-size: 0.9em;
+  color: #1B4F8C;
+  word-break: break-all;
+}
+.group-sp-link::after { content: " ↗"; }
 
 /* ---- Create group: name/email preview, pickers, selected-person chips ---- */
 .cg-preview {
