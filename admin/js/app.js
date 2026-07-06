@@ -363,12 +363,27 @@
     if (!people || people.length === 0) {
       return `<tr><td colspan="4" class="muted">${escapeHtml(emptyMsg)}</td></tr>`;
     }
-    return people.map((p) => `<tr>
-      <td><button class="link-button" data-jump-user-id="${escapeHtml(p.id)}" data-user-name="${escapeHtml(p.displayName)}">${escapeHtml(p.displayName)}</button></td>
+    return people.map((p) => {
+      const isDisabled = p.accountEnabled === false;
+      const alreadyRequested = submittedRemovals.has(p.id);
+      // Lock the × when the account is already offboarded (disabled) or a removal
+      // request was already filed this session — prevents a duplicate Remove request.
+      const locked = isDisabled || alreadyRequested;
+      const nameBadge = isDisabled
+        ? ` <span class="badge badge-disabled" title="Account is disabled — already offboarded">disabled</span>`
+        : (alreadyRequested
+            ? ` <span class="badge badge-pending" title="Removal request filed — pending admin approval">removal requested</span>`
+            : "");
+      const removeBtn = locked
+        ? `<button class="btn-remove" disabled aria-label="${isDisabled ? "Already offboarded" : "Removal already requested"}" title="${isDisabled ? "Account already disabled/offboarded" : "Removal request already filed — pending admin approval"}">×</button>`
+        : `<button class="btn-remove" data-user-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.displayName)}" data-email="${escapeHtml(p.mail || "")}" data-role="${rowRole}" aria-label="Remove">×</button>`;
+      return `<tr>
+      <td><button class="link-button" data-jump-user-id="${escapeHtml(p.id)}" data-user-name="${escapeHtml(p.displayName)}">${escapeHtml(p.displayName)}</button>${nameBadge}</td>
       <td>${escapeHtml(p.jobTitle || "")}</td>
       <td>${p.mail ? `<a href="mailto:${escapeHtml(p.mail)}" onclick="event.stopPropagation()">${escapeHtml(p.mail)}</a>` : `<span class="muted">—</span>`}</td>
-      <td class="row-actions"><button class="btn-remove" data-user-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.displayName)}" data-email="${escapeHtml(p.mail || "")}" data-role="${rowRole}" aria-label="Remove">×</button></td>
-    </tr>`).join("");
+      <td class="row-actions">${removeBtn}</td>
+    </tr>`;
+    }).join("");
   }
 
   $("back-to-groups-btn").addEventListener("click", () => {
@@ -411,6 +426,16 @@
 
   // Smart remove: open the confirm modal with per-group vs full-offboard options.
   let pendingRemove = null; // { userId, userName, role, btn, otherManagedGroups }
+
+  // Session-scoped guard against duplicate removal requests. Owner-mode Remove files
+  // a Pending MemberRequests row; the member stays visible (the browser does NOT
+  // refresh after the flow runs — approval + provisioning happen server-side with no
+  // callback here). Without this, an owner who submits, sees the member still listed,
+  // and clicks × again files a second identical request — which is exactly what
+  // produced the duplicate (items 46/47) that failed the Remove flow. Any userId in
+  // this set renders its × button in a locked "requested" state for the rest of the
+  // session. Disabled (already-offboarded) accounts are locked the same way at render.
+  const submittedRemovals = new Set();
 
   function wireRemoveHandlers() {
     ["owners-tbody", "members-tbody"].forEach((id) => {
@@ -501,11 +526,21 @@
               removalDisposition: disposition,
               transferTo,
             });
-            showToast(`Removal request submitted for ${userName}.`);
+            showToast(`Removal request submitted for ${userName}. An admin will approve it — you don't need to submit again.`);
             logAction("submitted Remove request", userName, userId, { group: currentDetailGroup.displayName, disposition, transferTo });
+            // Lock this member's × for the rest of the session so a second identical
+            // request can't be filed (the list does NOT refresh after submit).
+            submittedRemovals.add(userId);
+            btn.disabled = true;
+            btn.textContent = "×";
+            btn.title = "Removal request already filed — pending admin approval";
+            const badgeCell = btn.closest("tr")?.querySelector("td:first-child");
+            if (badgeCell && !badgeCell.querySelector(".badge-pending")) {
+              badgeCell.insertAdjacentHTML("beforeend", ` <span class="badge badge-pending" title="Removal request filed — pending admin approval">removal requested</span>`);
+            }
           } catch (err) {
             showError(`Could not submit removal request: ${err.message}`);
-          } finally {
+            // Only re-enable on failure so the owner can retry.
             btn.disabled = false;
             btn.textContent = "×";
           }

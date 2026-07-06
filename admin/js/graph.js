@@ -79,7 +79,9 @@ const GRAPH = (() => {
   }
 
   async function listGroupMembers(groupId) {
-    const path = `/groups/${groupId}/members/microsoft.graph.user?$select=id,displayName,mail,userPrincipalName,jobTitle&$top=100`;
+    // accountEnabled is selected so the UI can badge disabled (already-offboarded)
+    // members and block a duplicate removal request against them.
+    const path = `/groups/${groupId}/members/microsoft.graph.user?$select=id,displayName,mail,userPrincipalName,jobTitle,accountEnabled&$top=100`;
     return callGraphAll(path);
   }
 
