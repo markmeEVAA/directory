@@ -248,6 +248,15 @@ const GRAPH = (() => {
     });
   }
 
+  // Permanently delete a user. Graph DELETE is a SOFT delete: the account moves to
+  // the Entra deleted-items bin, recoverable for 30 days, then auto-purged. Requires
+  // User.ReadWrite.All (in scope) AND the signed-in admin to hold a directory role
+  // that permits user deletion (e.g. User Administrator) — otherwise Graph returns
+  // 403 Authorization_RequestDenied, handled by the caller.
+  async function deleteUser(userId) {
+    return callGraph(`/users/${userId}`, { method: "DELETE" });
+  }
+
   // Generic user-field update. Used by the inline-edit UI on user detail view.
   // patch is a partial user object, e.g. { jobTitle: "Baseball: VP" } or { displayName: "..." }
   async function updateUser(userId, patch) {
@@ -518,6 +527,7 @@ const GRAPH = (() => {
     removeUserLicense,
     disableUserAccount,
     enableUserAccount,
+    deleteUser,
     createUser,
     assignUserLicense,
     updateUser,

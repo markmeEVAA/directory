@@ -1163,6 +1163,10 @@
     $("offboard-user-btn").classList.toggle("hidden", isFullyOffboarded);
     $("reenable-user-btn").classList.toggle("hidden", !isDisabled);
 
+    // Delete is admin-only AND only offered on already-disabled accounts — you must
+    // offboard/disable first, so nobody one-clicks a live user into deletion.
+    $("delete-user-btn").classList.toggle("hidden", !(role === "admin" && isDisabled));
+
     // Add-to-group only meaningful if account is active (otherwise the user can't use the group)
     $("add-user-to-group-btn").classList.toggle("hidden", isDisabled);
 
@@ -1475,6 +1479,57 @@
     } finally {
       btn.disabled = false;
       btn.textContent = origText;
+    }
+  });
+
+  // Delete account (admin-only, disabled accounts only). Graph DELETE is a soft delete:
+  // recoverable for 30 days in the Entra deleted-items bin, then permanently purged.
+  // Requires typing the account's login to confirm — guards against deleting the wrong person.
+  $("delete-user-btn").addEventListener("click", async () => {
+    if (!currentDetailUser || role !== "admin") return;
+    const u = currentDetailUser;
+    const login = (u.userPrincipalName || "").split("@")[0];
+    const ok = await confirmCustom({
+      title: "Delete account",
+      body: `
+        <p>Permanently delete <strong>${escapeHtml(u.displayName)}</strong> (<code>${escapeHtml(u.userPrincipalName || "")}</code>)?</p>
+        <ul>
+          <li>The account is <strong>soft-deleted</strong> — recoverable for <strong>30 days</strong> in the Entra deleted-items bin, then <strong>permanently purged</strong>.</li>
+          <li>All group memberships and remaining access are removed immediately.</li>
+        </ul>
+        <p class="muted">This is only offered on already-disabled accounts. Prefer <strong>Offboard</strong> first if you're not certain.</p>
+        <label for="delete-confirm-input" style="font-weight:600; display:block; margin:12px 0 6px;">Type <code>${escapeHtml(login)}</code> to confirm:</label>
+        <input type="text" id="delete-confirm-input" autocomplete="off" style="width:100%; padding:6px 8px; font-size:14px;" />`,
+      okLabel: "Delete account",
+      okClass: "btn-danger",
+    });
+    if (!ok) return;
+    const typed = ($("delete-confirm-input")?.value || "").trim();
+    if (typed !== login) {
+      showError(`Deletion cancelled — you typed "${typed}", which doesn't match "${login}".`);
+      return;
+    }
+    const btn = $("delete-user-btn");
+    btn.disabled = true;
+    const origText = btn.textContent;
+    btn.textContent = "Deleting…";
+    try {
+      await GRAPH.deleteUser(u.id);
+      logAction("deleted account", u.displayName, u.id, { upn: u.userPrincipalName });
+      showToast(`${u.displayName} deleted (recoverable for 30 days).`);
+      // The user no longer exists — leave the detail view and force-refresh the members
+      // list (invalidate the cache so the deleted user drops off).
+      currentDetailUser = null;
+      membersState.allUsers = null;
+      show("members");
+      ensureMembersLoaded();
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = origText;
+      const msg = /Authorization_RequestDenied|403/.test(err.message)
+        ? "Delete failed (403). Your sign-in may lack a directory role that permits user deletion (e.g. User Administrator). web-admin@ can perform deletions."
+        : `Delete failed: ${err.message}`;
+      showError(msg);
     }
   });
 
