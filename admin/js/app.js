@@ -775,6 +775,11 @@
       try { await GRAPH.disableUserAccount(userId); }
       catch (err) { errors.push(`disable account: ${err.message}`); }
 
+      // 5. Stamp the offboard tag so the auto-delete flow picks it up after the grace
+      //    period (this admin path bypasses the approval flow, which stamps it otherwise).
+      try { await GRAPH.stampOffboardTag(userId); }
+      catch (err) { errors.push(`offboard tag: ${err.message}`); }
+
       logAction("offboarded fully", userName, userId, { context: fromGroupCtx ? "group" : "user" });
 
       if (errors.length > 0) {
@@ -1473,6 +1478,10 @@
       catch (err) { errors.push(`enable: ${err.message}`); }
       try { await GRAPH.assignUserLicense(u.id); }
       catch (err) { errors.push(`license: ${err.message}`); }
+      // Clear the offboard tag so a recovered account can never be swept up by the
+      // scheduled auto-delete flow. Best-effort — never block re-enable on this.
+      try { await GRAPH.clearOffboardTag(u.id); }
+      catch (err) { console.warn("Could not clear offboard tag:", err.message); }
       logAction("re-enabled & re-licensed user", u.displayName, u.id);
       if (errors.length) showError(`Re-enable partial: ${errors.join("; ")}`);
       await refreshUserDetail();

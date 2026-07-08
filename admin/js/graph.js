@@ -248,6 +248,24 @@ const GRAPH = (() => {
     });
   }
 
+  // Offboard tag: stamp / clear extensionAttribute1 = "OFFBOARD:<yyyy-mm-dd>". The
+  // scheduled "Auto-Delete Offboarded Accounts" flow deletes accounts carrying this
+  // tag once they've been disabled for 60+ days. Stamped on full offboard; cleared on
+  // re-enable so a recovered account can never be swept up by the auto-delete flow.
+  async function stampOffboardTag(userId) {
+    const today = new Date().toISOString().slice(0, 10); // yyyy-mm-dd (matches the flow's format)
+    return callGraph(`/users/${userId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ onPremisesExtensionAttributes: { extensionAttribute1: `OFFBOARD:${today}` } }),
+    });
+  }
+  async function clearOffboardTag(userId) {
+    return callGraph(`/users/${userId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ onPremisesExtensionAttributes: { extensionAttribute1: null } }),
+    });
+  }
+
   // Permanently delete a user. Graph DELETE is a SOFT delete: the account moves to
   // the Entra deleted-items bin, recoverable for 30 days, then auto-purged. Requires
   // User.ReadWrite.All (in scope) AND the signed-in admin to hold a directory role
@@ -527,6 +545,8 @@ const GRAPH = (() => {
     removeUserLicense,
     disableUserAccount,
     enableUserAccount,
+    stampOffboardTag,
+    clearOffboardTag,
     deleteUser,
     createUser,
     assignUserLicense,
