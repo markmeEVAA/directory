@@ -3,13 +3,13 @@
 
 const GRAPH = (() => {
   const BASE = "https://graph.microsoft.com/v1.0";
-  // Either of these groups grants full admin access in the portal:
-  //   EVAA Portal Admins  — the explicit admins group
-  //   EVAA - Leadership   — 7 executive officers (President, VP, Treasurer, Secretary,
-  //                         Marketing, Operations, Safety). They get admin too.
+  // Only this group grants full admin access to the user/group-management portal.
+  //   EVAA Portal Admins  — the explicit admins group (Mark Espena, Michelle Stessman)
+  // NOTE: EVAA - Leadership was removed from this gate on 2026-07-11. Leadership no longer
+  // gets user-management admin here; finance approvals are handled by the separate finance
+  // console, which gates on EVAA Finance + EVAA Portal Admins.
   const ADMIN_GROUP_IDS = [
     "98d51c39-149a-4dbf-9e86-1510035d8239", // EVAA Portal Admins
-    "12e5f9ce-d644-4052-aff8-b31e99c3acb9", // EVAA - Leadership
   ];
 
   async function callGraph(path, options = {}) {

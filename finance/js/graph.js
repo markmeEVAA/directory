@@ -21,11 +21,15 @@ const GRAPH = (() => {
   // Option types — must match FinanceFormOptions OptionType choice column
   const OPTION_TYPES = ["Sport", "ExpenseCategory", "ProgramType", "TravelingSubtype", "Season", "VendorCardinality", "RequestType"];
 
-  // Treasurer / Leadership group — gates console access.
-  // Mirrors /admin/js/graph.js ADMIN_GROUP_IDS.
-  const LEADERSHIP_GROUP_IDS = [
+  // Console access gate — membership in ANY of these grants access:
+  //   EVAA Finance       — finance committee + treasurer mailbox
+  //   EVAA - Leadership  — the 7 officers (Kevin/treasurer included)
+  //   EVAA Portal Admins — Mark, Michelle
+  // Group IDs confirmed live via Graph 2026-07-11. Mirrors /admin/js/graph.js pattern.
+  const FINANCE_GROUP_IDS = [
+    "b5585468-506a-4825-9db1-de5f987fda29", // EVAA Finance (FinanceCommittee@evaasports.org)
+    "12e5f9ce-d644-4052-aff8-b31e99c3acb9", // EVAA - Leadership
     "98d51c39-149a-4dbf-9e86-1510035d8239", // EVAA Portal Admins
-    "12e5f9ce-d644-4052-aff8-b31e99c3acb9", // EVAA - Leadership (includes treasurer)
   ];
 
   // Helper-flow URL — SAS-signed Power Automate trigger for "EVAA - Submit Finance Request".
@@ -78,11 +82,11 @@ const GRAPH = (() => {
     try {
       const result = await callGraph("/me/checkMemberGroups", {
         method: "POST",
-        body: JSON.stringify({ groupIds: LEADERSHIP_GROUP_IDS }),
+        body: JSON.stringify({ groupIds: FINANCE_GROUP_IDS }),
       });
-      return Array.isArray(result.value) && result.value.some((id) => LEADERSHIP_GROUP_IDS.includes(id));
+      return Array.isArray(result.value) && result.value.some((id) => FINANCE_GROUP_IDS.includes(id));
     } catch (err) {
-      console.error("Leadership check failed:", err);
+      console.error("Finance access check failed:", err);
       return false;
     }
   }
