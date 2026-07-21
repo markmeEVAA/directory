@@ -485,7 +485,7 @@
                   <select id="owner-remove-disposition" style="width:100%; padding:6px 8px; font-size:14px;"
                           onchange="document.getElementById('owner-remove-transfer-wrap').style.display = (this.value === 'Transfer mailbox to another person' ? 'block' : 'none');">
                     <option value="Remove from group only">Just remove from this group (account untouched)</option>
-                    <option value="Transfer mailbox to another person">Transfer mailbox access to someone else in the group</option>
+                    <option value="Transfer mailbox to another person">Transfer mailbox + OneDrive access to someone else in the group</option>
                     <option value="Disable + preserve data">Disable account, keep mailbox alive (preserve data)</option>
                     <option value="Offboard fully">Offboard fully (remove license, 30-day data delete clock)</option>
                   </select>
@@ -495,7 +495,7 @@
                   <select id="owner-remove-transfer-to" style="width:100%; padding:6px 8px; font-size:14px;">
                     ${transferOptionsHtml}
                   </select>
-                  <p class="muted" style="margin-top:6px;">An admin will set up the mailbox handoff after approving.</p>
+                  <p class="muted" style="margin-top:6px;">On approval, the mailbox becomes shared (Full Access + Send As) and this person is granted access to the OneDrive.</p>
                 </div>
                 <p class="muted" style="margin-top:12px;">An admin will be notified to approve. You'll get a confirmation once it's processed.</p>
               `,
@@ -725,6 +725,17 @@
     const { userId, userName, otherManagedGroups, context } = pendingRemove;
     const fromGroupCtx = context !== "user" && currentDetailGroup;
     const totalGroups = (fromGroupCtx ? 1 : 0) + otherManagedGroups.length;
+    // Build the optional transferee picker (active managed users, minus the departing one).
+    let transferOpts = "";
+    try {
+      const users = membersState.allUsers || (await GRAPH.listAllManagedUsers());
+      transferOpts = users
+        .filter((u) => u.id !== userId && u.accountEnabled !== false && (u.userPrincipalName || u.mail))
+        .sort((a, b) => (a.displayName || "").localeCompare(b.displayName || ""))
+        .map((u) => `<option value="${escapeHtml(u.userPrincipalName || u.mail)}">${escapeHtml(u.displayName)} (${escapeHtml(u.userPrincipalName || u.mail)})</option>`)
+        .join("");
+    } catch (e) { /* non-fatal — picker just won't have options */ }
+
     const ok = await confirmCustom({
       body: `<p>Offboard <strong>${escapeHtml(userName)}</strong> fully?</p>
         <p>This will:</p>
@@ -734,11 +745,47 @@
           <li>Disable the account</li>
         </ul>
         <p class="warn-block">⚠ Exchange will start a <strong>30-day countdown</strong> to permanently delete the mailbox and OneDrive.</p>
+        <div style="margin:14px 0 4px;">
+          <label for="admin-offboard-transfer-to" style="font-weight:600; display:block; margin-bottom:6px;">Hand this person's mailbox + OneDrive to (optional):</label>
+          <select id="admin-offboard-transfer-to" style="width:100%; padding:6px 8px; font-size:14px;">
+            <option value="">— No transfer, just offboard —</option>
+            ${transferOpts}
+          </select>
+          <p class="muted" style="margin-top:6px;">If chosen, this is routed for admin approval; on approval the mailbox becomes a <strong>shared mailbox</strong> (Full Access + Send As) and the recipient is granted access to the OneDrive.</p>
+        </div>
         <p class="muted">Re-enable via this portal or Entra admin center within 30 days to recover.</p>`,
       okLabel: "Offboard fully",
       okClass: "btn-danger",
     });
     if (!ok) return;
+
+    // If a transferee was chosen, route the whole thing through the approval flow (secure,
+    // async: mailbox->shared + OneDrive grant + license/disable/strip/tag happen on approval).
+    // We do NOT offboard directly here — the flow owns the correct ordering.
+    const transferTo = ($("admin-offboard-transfer-to")?.value || "").trim();
+    if (transferTo) {
+      const parts = (userName || "").split(/\s+/);
+      const sport = pendingRemove.otherManagedGroups?.[0]?.displayName || currentDetailGroup?.displayName || "EVAA - Board";
+      try {
+        await GRAPH.createMemberRequest({
+          requestType: "Remove",
+          sportDisplayName: sport,
+          firstName: parts[0] || userName,
+          lastName: parts.slice(1).join(" "),
+          memberId: userId,
+          memberEmail: currentDetailUser?.mail || currentDetailUser?.userPrincipalName || "",
+          removalDisposition: "Transfer mailbox to another person",
+          transferTo,
+        });
+        logAction("submitted offboard+transfer request", userName, userId, { transferTo, sport });
+        showToast(`Offboard + handoff of ${userName} to ${transferTo} submitted for admin approval.`);
+        $("remove-panel").classList.add("hidden");
+        pendingRemove = null;
+      } catch (err) {
+        showError(`Could not submit transfer request: ${err.message}`);
+      }
+      return;
+    }
 
     $("remove-this-group-btn").disabled = true;
     $("remove-preserve-btn").disabled = true;
