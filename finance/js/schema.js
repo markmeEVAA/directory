@@ -9,16 +9,36 @@
 // To add a new sport / category / etc., treasurer edits the SP list. No code change.
 
 const SCHEMA = (() => {
-  // ─── DYNAMIC ENUMS — populated by load() ──────────────────────────────────
-  // Defaults are sensible fallbacks so the form can render even if the options
-  // list isn't reachable. Real values overwrite these on load().
+  // ─── DYNAMIC ENUMS — baked defaults, refreshed by load() ──────────────────
+  // These defaults are a SNAPSHOT of the FinanceFormOptions SP list (2026-07-20).
+  // They are populated (not empty) on purpose: the submission form is used by
+  // coaches / members / AV Fusion folks who do NOT have access to the board
+  // SharePoint site, so their SCHEMA.load() read of the options list fails. With
+  // real values baked in here, the form still shows every dropdown for everyone.
+  // The treasurer console (board members, who DO have site access) refreshes these
+  // from the live list via load(). ⚠️ When the treasurer edits options in the SP
+  // list, re-snapshot this block so the public form stays in sync (or move options
+  // to a public feed — see note in load()).
   const enums = {
     REQUEST_TYPES: ["Check Request", "Deposit Request", "Credit Card Use"],
-    SPORTS: [],
-    PROGRAM_TYPE: [],
-    TRAVELING_SUBTYPE: [],
-    SEASON: [],
-    EXPENSE_CATEGORY: [],
+    SPORTS: [
+      "Baseball", "Basketball", "Cross Country Running", "Football", "Lacrosse",
+      "Soccer", "Softball", "Tennis", "Track", "Trap", "Volleyball", "Wrestling",
+      "XC Ski", "Multi-Sport / Operations", "Other (note in details)",
+    ],
+    PROGRAM_TYPE: ["Traveling", "In-House", "All", "N/A"],
+    TRAVELING_SUBTYPE: ["Fall Traveling", "Spring Traveling", "Summer Traveling", "Winter Traveling"],
+    SEASON: [
+      "This request is for the current season.",
+      "This request is for the upcoming season.",
+    ],
+    EXPENSE_CATEGORY: [
+      "Coaching Fees", "Tournament Registration Fees", "Tournament Registration Fees Income",
+      "Concession Income", "Equipment", "Uniforms", "Field/Facility Rental", "Officials / Refs",
+      "Awards / Trophies", "Insurance", "Background Checks", "Training / Clinics",
+      "Travel / Lodging", "Marketing / Promotion", "Office / Supplies", "Bank Fees",
+      "Reimbursement", "Miscellaneous Income", "Other (note in details)",
+    ],
     VENDOR_CARDINALITY: ["Single Vendor", "Multiple Vendors"],
   };
 
@@ -36,13 +56,16 @@ const SCHEMA = (() => {
         GRAPH.getOptionsByType("VendorCardinality"),
         GRAPH.getOptionsByType("RequestType"),
       ]);
-      enums.SPORTS            = sports.map((o) => o.title);
-      enums.EXPENSE_CATEGORY  = cats.map((o) => o.title);
-      enums.PROGRAM_TYPE      = prog.map((o) => o.title);
-      enums.TRAVELING_SUBTYPE = travel.map((o) => o.title);
-      enums.SEASON            = season.map((o) => o.title);
+      // Only overwrite a default when the read actually returned rows. A user
+      // without board-site access can get an empty/trimmed result — in that case
+      // keep the baked defaults instead of blanking the dropdowns.
+      if (sports.length) enums.SPORTS            = sports.map((o) => o.title);
+      if (cats.length)   enums.EXPENSE_CATEGORY  = cats.map((o) => o.title);
+      if (prog.length)   enums.PROGRAM_TYPE      = prog.map((o) => o.title);
+      if (travel.length) enums.TRAVELING_SUBTYPE = travel.map((o) => o.title);
+      if (season.length) enums.SEASON            = season.map((o) => o.title);
       if (vendor.length) enums.VENDOR_CARDINALITY = vendor.map((o) => o.title);
-      if (req.length) enums.REQUEST_TYPES = req.map((o) => o.title);
+      if (req.length)    enums.REQUEST_TYPES     = req.map((o) => o.title);
     } catch (e) {
       console.warn("SCHEMA.load() failed — falling back to defaults:", e);
     }
