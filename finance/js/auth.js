@@ -21,7 +21,8 @@ const AUTH = (() => {
     auth: {
       clientId: CLIENT_ID,
       authority: `https://login.microsoftonline.com/${TENANT_ID}`,
-      redirectUri: window.location.origin + window.location.pathname,
+      // Overridden per-page in init() to a REGISTERED canonical URI (see below).
+      redirectUri: window.location.origin + "/directory/finance/",
     },
     cache: {
       cacheLocation: "sessionStorage",
@@ -36,6 +37,12 @@ const AUTH = (() => {
 
   async function init({ consoleMode = false } = {}) {
     SCOPES = consoleMode ? SCOPES_CONSOLE : SCOPES_SUBMITTER;
+    // Pin redirectUri to a value REGISTERED on the app reg, independent of how the
+    // page was reached (with/without .html, with/without trailing slash). This is
+    // what prevents AADSTS50011 redirect-URI-mismatch. Both targets are registered
+    // SPA redirect URIs; Microsoft returns the user to the canonical URL after login.
+    msalConfig.auth.redirectUri = window.location.origin +
+      (consoleMode ? "/directory/finance/admin.html" : "/directory/finance/");
     if (typeof window.msal === "undefined" || !window.msal.PublicClientApplication) {
       throw new Error("MSAL library failed to load (window.msal is undefined). Check network / CDN.");
     }
