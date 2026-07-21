@@ -25,7 +25,9 @@ const AUTH = (() => {
     },
     cache: {
       cacheLocation: "sessionStorage",
-      storeAuthStateInCookie: false,
+      // Safari/iOS: keep auth state in a cookie too, so the redirect round-trip
+      // survives ITP / sessionStorage quirks. Required for reliable redirect auth.
+      storeAuthStateInCookie: true,
     },
   };
 
@@ -39,27 +41,41 @@ const AUTH = (() => {
     }
     msalClient = new window.msal.PublicClientApplication(msalConfig);
     await msalClient.initialize();
-    const accounts = msalClient.getAllAccounts();
-    if (accounts.length > 0) {
-      msalClient.setActiveAccount(accounts[0]);
-      activeAccount = accounts[0];
+
+    // Redirect flow (Safari/iOS-safe — popups are blocked by Safari's popup blocker
+    // and its non-synchronous-open rule). handleRedirectPromise() MUST run on every
+    // load: it returns the auth result when we've just come back from Microsoft
+    // sign-in, or null on a normal load.
+    let redirectResult = null;
+    try {
+      redirectResult = await msalClient.handleRedirectPromise();
+    } catch (e) {
+      console.warn("handleRedirectPromise failed:", e);
+    }
+
+    if (redirectResult && redirectResult.account) {
+      activeAccount = redirectResult.account;
+      msalClient.setActiveAccount(activeAccount);
+    } else {
+      const accounts = msalClient.getAllAccounts();
+      if (accounts.length > 0) {
+        msalClient.setActiveAccount(accounts[0]);
+        activeAccount = accounts[0];
+      }
     }
     return activeAccount;
   }
 
   async function signIn() {
     if (!msalClient) throw new Error("Auth not initialized");
-    const result = await msalClient.loginPopup({ scopes: SCOPES });
-    if (result && result.account) {
-      msalClient.setActiveAccount(result.account);
-      activeAccount = result.account;
-    }
-    return activeAccount;
+    // Navigates away to Microsoft and returns to redirectUri; does NOT resolve with
+    // an account. On return, init()/handleRedirectPromise() picks up the signed-in account.
+    await msalClient.loginRedirect({ scopes: SCOPES });
   }
 
   async function signOut() {
     if (!msalClient) return;
-    return msalClient.logoutPopup({
+    return msalClient.logoutRedirect({
       postLogoutRedirectUri: msalConfig.auth.redirectUri,
     });
   }
@@ -72,9 +88,11 @@ const AUTH = (() => {
       const result = await msalClient.acquireTokenSilent(request);
       return result.accessToken;
     } catch (err) {
-      console.warn("Silent token acquisition failed, falling back to popup:", err);
-      const result = await msalClient.acquireTokenPopup(request);
-      return result?.accessToken;
+      console.warn("Silent token acquisition failed, falling back to redirect:", err);
+      // Interactive fallback via redirect (no popup). Navigates away and returns
+      // to the page; the caller's in-flight promise won't resolve — that's expected.
+      await msalClient.acquireTokenRedirect(request);
+      return undefined;
     }
   }
 

@@ -53,7 +53,8 @@
     const btn = $("sign-in-btn");
     btn.disabled = false;
     btn.addEventListener("click", async () => {
-      try { const acct = await AUTH.signIn(); if (acct) window.location.reload(); }
+      // Redirect flow: navigates away; page re-boots on return and init() picks up the account.
+      try { await AUTH.signIn(); }
       catch (e) { $("signin-error").textContent = e.message; $("signin-error").classList.remove("hidden"); }
     });
     show("view-signin");

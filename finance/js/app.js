@@ -35,8 +35,9 @@
     btn.disabled = false;
     btn.addEventListener("click", async () => {
       try {
-        const acct = await AUTH.signIn();
-        if (acct) window.location.reload();
+        // Redirect flow: navigates away to Microsoft; the page re-boots on return
+        // and AUTH.init() picks up the signed-in account. No reload needed here.
+        await AUTH.signIn();
       } catch (e) {
         $("signin-error").textContent = e.message;
         $("signin-error").classList.remove("hidden");
