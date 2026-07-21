@@ -1,0 +1,23 @@
+{
+  "_comment": "Public dropdown-options feed for the EVAA Finance submission form. Served at https://markmeevaa.github.io/directory/finance/options.json (no auth). Snapshot 2026-07-20; to be auto-republished by the 'EVAA - Publish Finance Options' Power Automate flow whenever FinanceFormOptions changes.",
+  "RequestType": ["Check Request", "Deposit Request", "Credit Card Use"],
+  "Sport": [
+    "Baseball", "Basketball", "Cross Country Running", "Football", "Lacrosse",
+    "Soccer", "Softball", "Tennis", "Track", "Trap", "Volleyball", "Wrestling",
+    "XC Ski", "Multi-Sport / Operations", "Other (note in details)"
+  ],
+  "ExpenseCategory": [
+    "Coaching Fees", "Tournament Registration Fees", "Tournament Registration Fees Income",
+    "Concession Income", "Equipment", "Uniforms", "Field/Facility Rental", "Officials / Refs",
+    "Awards / Trophies", "Insurance", "Background Checks", "Training / Clinics",
+    "Travel / Lodging", "Marketing / Promotion", "Office / Supplies", "Bank Fees",
+    "Reimbursement", "Miscellaneous Income", "Other (note in details)"
+  ],
+  "ProgramType": ["Traveling", "In-House", "All", "N/A"],
+  "TravelingSubtype": ["Fall Traveling", "Spring Traveling", "Summer Traveling", "Winter Traveling"],
+  "Season": [
+    "This request is for the current season.",
+    "This request is for the upcoming season."
+  ],
+  "VendorCardinality": ["Single Vendor", "Multiple Vendors"]
+}

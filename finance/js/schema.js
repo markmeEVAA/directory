@@ -42,10 +42,40 @@ const SCHEMA = (() => {
     VENDOR_CARDINALITY: ["Single Vendor", "Multiple Vendors"],
   };
 
-  // Async loader — pulls FinanceFormOptions and populates `enums`.
-  // Idempotent (cached in GRAPH layer); safe to await multiple times.
+  // Apply a { OptionType: [strings] } map onto enums, guarding empties so a
+  // partial source never blanks a populated dropdown.
+  function applyOptions(j) {
+    if (j.Sport?.length)             enums.SPORTS             = j.Sport;
+    if (j.ExpenseCategory?.length)   enums.EXPENSE_CATEGORY   = j.ExpenseCategory;
+    if (j.ProgramType?.length)       enums.PROGRAM_TYPE       = j.ProgramType;
+    if (j.TravelingSubtype?.length)  enums.TRAVELING_SUBTYPE  = j.TravelingSubtype;
+    if (j.Season?.length)            enums.SEASON             = j.Season;
+    if (j.VendorCardinality?.length) enums.VENDOR_CARDINALITY = j.VendorCardinality;
+    if (j.RequestType?.length)       enums.REQUEST_TYPES      = j.RequestType;
+  }
+
+  // Async loader — populates `enums`, most-available source first:
+  //   1) PUBLIC options.json feed — no auth, works for every submitter (coaches,
+  //      members, AV Fusion). Republished by a Power Automate flow when admins edit
+  //      the FinanceFormOptions list, so the form stays dynamic without SharePoint access.
+  //   2) Live Graph read of FinanceFormOptions — for console users / anyone with site access.
+  //   3) Baked defaults already in `enums` — last-resort fallback.
+  // Idempotent; safe to await multiple times.
   async function load() {
-    if (typeof GRAPH === "undefined" || !GRAPH.getOptionsByType) return; // caller didn't load graph.js yet — defaults stay
+    // 1) Public feed.
+    try {
+      const url = new URL("./options.json", document.baseURI).href + "?_=" + Date.now();
+      const resp = await fetch(url, { cache: "no-store" });
+      if (resp.ok) {
+        const j = await resp.json();
+        if (j && !j.error) { applyOptions(j); return; }
+      }
+    } catch (e) {
+      console.warn("options.json feed unavailable, trying Graph:", e);
+    }
+
+    // 2) Live Graph read (requires site access).
+    if (typeof GRAPH === "undefined" || !GRAPH.getOptionsByType) return; // graph.js not loaded — keep defaults
     try {
       const [sports, cats, prog, travel, season, vendor, req] = await Promise.all([
         GRAPH.getOptionsByType("Sport"),
@@ -56,18 +86,17 @@ const SCHEMA = (() => {
         GRAPH.getOptionsByType("VendorCardinality"),
         GRAPH.getOptionsByType("RequestType"),
       ]);
-      // Only overwrite a default when the read actually returned rows. A user
-      // without board-site access can get an empty/trimmed result — in that case
-      // keep the baked defaults instead of blanking the dropdowns.
-      if (sports.length) enums.SPORTS            = sports.map((o) => o.title);
-      if (cats.length)   enums.EXPENSE_CATEGORY  = cats.map((o) => o.title);
-      if (prog.length)   enums.PROGRAM_TYPE      = prog.map((o) => o.title);
-      if (travel.length) enums.TRAVELING_SUBTYPE = travel.map((o) => o.title);
-      if (season.length) enums.SEASON            = season.map((o) => o.title);
-      if (vendor.length) enums.VENDOR_CARDINALITY = vendor.map((o) => o.title);
-      if (req.length)    enums.REQUEST_TYPES     = req.map((o) => o.title);
+      applyOptions({
+        Sport: sports.map((o) => o.title),
+        ExpenseCategory: cats.map((o) => o.title),
+        ProgramType: prog.map((o) => o.title),
+        TravelingSubtype: travel.map((o) => o.title),
+        Season: season.map((o) => o.title),
+        VendorCardinality: vendor.map((o) => o.title),
+        RequestType: req.map((o) => o.title),
+      });
     } catch (e) {
-      console.warn("SCHEMA.load() failed — falling back to defaults:", e);
+      console.warn("SCHEMA.load() Graph read failed — falling back to defaults:", e);
     }
   }
 
