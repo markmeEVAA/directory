@@ -484,10 +484,10 @@
                   <label for="owner-remove-disposition" style="font-weight:600; display:block; margin-bottom:6px;">What should happen to ${escapeHtml(firstName)}'s account and email?</label>
                   <select id="owner-remove-disposition" style="width:100%; padding:6px 8px; font-size:14px;"
                           onchange="document.getElementById('owner-remove-transfer-wrap').style.display = (this.value === 'Transfer mailbox to another person' ? 'block' : 'none');">
-                    <option value="Remove from group only">Just remove from this group (account untouched)</option>
-                    <option value="Transfer mailbox to another person">Transfer mailbox + OneDrive access to someone else in the group</option>
-                    <option value="Disable + preserve data">Disable account, keep mailbox alive (preserve data)</option>
-                    <option value="Offboard fully">Offboard fully (remove license, 30-day data delete clock)</option>
+                    <option value="Remove from group only">Remove from this group only (keep account)</option>
+                    <option value="Transfer mailbox to another person">Offboard — transfer mailbox + OneDrive to someone in this group</option>
+                    <option value="Disable + preserve data">Disable temporarily (keep account + data)</option>
+                    <option value="Offboard fully">Offboard — no transfer (remove license, disable)</option>
                   </select>
                 </div>
                 <div id="owner-remove-transfer-wrap" style="margin: 6px 0; display:none;">
@@ -738,44 +738,61 @@
 
     const groupsLine = `Remove from ${totalGroups} managed group${totalGroups === 1 ? "" : "s"}`;
     const ok = await confirmCustom({
-      body: `<p>Offboard <strong>${escapeHtml(userName)}</strong>?</p>
-        <div style="margin:12px 0 4px;">
-          <label for="admin-offboard-transfer-to" style="font-weight:600; display:block; margin-bottom:6px;">Hand this person's mailbox + OneDrive to (optional):</label>
-          <select id="admin-offboard-transfer-to" style="width:100%; padding:6px 8px; font-size:14px;"
-                  onchange="var t=this.value;document.getElementById('conseq-none').style.display=t?'none':'block';document.getElementById('conseq-xfer').style.display=t?'block':'none';">
-            <option value="">— No transfer, just offboard —</option>
+      body: `<p>What should happen to <strong>${escapeHtml(userName)}</strong>?</p>
+        <select id="offboard-action" style="width:100%; padding:6px 8px; font-size:14px;"
+                onchange="var v=this.value;document.getElementById('cq-off').style.display=v==='offboard'?'block':'none';document.getElementById('cq-xfer').style.display=v==='transfer'?'block':'none';document.getElementById('cq-dis').style.display=v==='disable'?'block':'none';document.getElementById('xfer-wrap').style.display=v==='transfer'?'block':'none';">
+          <option value="offboard">Offboard — no transfer</option>
+          <option value="transfer">Offboard — transfer mailbox + OneDrive to someone</option>
+          <option value="disable">Disable temporarily (keep account + data)</option>
+        </select>
+        <div id="xfer-wrap" style="display:none; margin-top:10px;">
+          <label for="admin-offboard-transfer-to" style="font-weight:600; display:block; margin-bottom:6px;">Hand mailbox + OneDrive to:</label>
+          <select id="admin-offboard-transfer-to" style="width:100%; padding:6px 8px; font-size:14px;">
+            <option value="">— select a person —</option>
             ${transferOpts}
           </select>
         </div>
-        <div id="conseq-none">
+        <div id="cq-off" style="margin-top:12px;">
           <p style="margin-bottom:4px;">This will, immediately:</p>
           <ul>
             <li>${groupsLine}</li>
             <li>Remove the EVAA license</li>
             <li>Disable the account</li>
           </ul>
-          <p class="warn-block">⚠ Mailbox + OneDrive are retained ~<strong>30 days</strong> then purged. The disabled account <strong>auto-deletes after 60 days</strong> unless re-enabled. Re-enable here or in Entra to recover within the window.</p>
+          <p class="warn-block">⚠ Mailbox + OneDrive are retained ~<strong>30 days</strong> then purged. The disabled account <strong>auto-deletes after 60 days</strong> unless re-enabled.</p>
         </div>
-        <div id="conseq-xfer" style="display:none;">
-          <p style="margin-bottom:4px;">This is <strong>routed for admin approval</strong>. On approval it will:</p>
+        <div id="cq-xfer" style="display:none; margin-top:12px;">
+          <p style="margin-bottom:4px;"><strong>Routed for admin approval.</strong> On approval it will:</p>
           <ul>
             <li>Convert the mailbox to a <strong>shared mailbox</strong> — recipient gets Full Access + Send As</li>
             <li>Grant the recipient access to the <strong>OneDrive</strong></li>
-            <li>Remove the EVAA license and disable the account</li>
-            <li>${groupsLine}</li>
-            <li><strong>Keep the account</strong> (disabled, unlicensed) so the shared mailbox + OneDrive persist — it is <strong>not</strong> scheduled for deletion</li>
+            <li>Remove the EVAA license, disable the account, ${groupsLine.toLowerCase()}</li>
+            <li><strong>Keep the account</strong> (disabled, unlicensed) so the shared mailbox + OneDrive persist — <strong>not</strong> scheduled for deletion</li>
           </ul>
+        </div>
+        <div id="cq-dis" style="display:none; margin-top:12px;">
+          <p style="margin-bottom:4px;">This will, immediately:</p>
+          <ul>
+            <li>${groupsLine}</li>
+            <li>Disable the account (no sign-in)</li>
+            <li><strong>Keep the EVAA license</strong> — mailbox + OneDrive stay fully intact</li>
+          </ul>
+          <p class="muted">Reversible any time via Re-enable. Nothing is scheduled for deletion.</p>
         </div>`,
-      okLabel: "Offboard fully",
+      okLabel: "Apply",
       okClass: "btn-danger",
     });
     if (!ok) return;
+    const action = $("offboard-action")?.value || "offboard";
 
-    // If a transferee was chosen, route the whole thing through the approval flow (secure,
-    // async: mailbox->shared + OneDrive grant + license/disable/strip/tag happen on approval).
-    // We do NOT offboard directly here — the flow owns the correct ordering.
-    const transferTo = ($("admin-offboard-transfer-to")?.value || "").trim();
-    if (transferTo) {
+    // TRANSFER → route through the approval flow (secure, async): on approval the mailbox
+    // becomes shared + OneDrive is granted, then license removed, account disabled + KEPT.
+    if (action === "transfer") {
+      const transferTo = ($("admin-offboard-transfer-to")?.value || "").trim();
+      if (!transferTo) {
+        showError("Choose who receives the mailbox + OneDrive, or pick a different option.");
+        return;
+      }
       const parts = (userName || "").split(/\s+/);
       const sport = pendingRemove.otherManagedGroups?.[0]?.displayName || currentDetailGroup?.displayName || "EVAA - Board";
       try {
@@ -799,53 +816,62 @@
       return;
     }
 
+    // Direct actions (admin token). "offboard" = remove license + disable + delete-tag;
+    // "disable" = disable but KEEP license + data (reversible). Both strip managed groups.
     $("remove-this-group-btn").disabled = true;
     $("remove-preserve-btn").disabled = true;
     $("remove-offboard-btn").disabled = true;
     const errors = [];
+    const removedGroups = [];
 
     try {
-      // 1. If in group context, remove from this group
       if (fromGroupCtx) {
         try {
           if (pendingRemove.role === "owner") await GRAPH.removeOwner(currentDetailGroup.id, userId);
           else await GRAPH.removeMember(currentDetailGroup.id, userId);
+          removedGroups.push({ displayName: currentDetailGroup.displayName });
         } catch (err) { errors.push(`${currentDetailGroup.displayName}: ${err.message}`); }
       }
-
-      // 2. Remove from all OTHER managed groups
       for (const g of otherManagedGroups) {
-        try { await GRAPH.removeMember(g.id, userId); }
+        try { await GRAPH.removeMember(g.id, userId); removedGroups.push({ displayName: g.displayName }); }
         catch (_) {
-          try { await GRAPH.removeOwner(g.id, userId); }
+          try { await GRAPH.removeOwner(g.id, userId); removedGroups.push({ displayName: g.displayName }); }
           catch (e) { errors.push(`${g.displayName}: ${e.message}`); }
         }
       }
 
-      // 3. Remove EVAA license (idempotent — if already gone, treat as success)
-      try { await GRAPH.removeUserLicense(userId); }
-      catch (err) {
-        if (!/does not have a corresponding license/i.test(err.message)) {
-          errors.push(`license: ${err.message}`);
-        }
-      }
-
-      // 4. Disable account
       try { await GRAPH.disableUserAccount(userId); }
-      catch (err) { errors.push(`disable account: ${err.message}`); }
+      catch (err) { errors.push(`disable: ${err.message}`); }
 
-      // 5. Stamp the offboard tag so the auto-delete flow picks it up after the grace
-      //    period (this admin path bypasses the approval flow, which stamps it otherwise).
-      try { await GRAPH.stampOffboardTag(userId); }
-      catch (err) { errors.push(`offboard tag: ${err.message}`); }
-
-      logAction("offboarded fully", userName, userId, { context: fromGroupCtx ? "group" : "user" });
-
-      if (errors.length > 0) {
-        showError(`Offboard partial: ${errors.length} step(s) failed. ${errors.join("; ")}`);
+      if (action === "disable") {
+        // Keep license + data. Notify portal admins (best-effort). No delete-tag.
+        try {
+          const adminMail = AUTH.getAccount()?.username || "(unknown admin)";
+          const adminName = AUTH.getAccount()?.name || adminMail;
+          const removedGroupsHtml = removedGroups.length
+            ? removedGroups.map((g) => `<li>${escapeHtml(g.displayName)}</li>`).join("")
+            : `<li><em>(no managed groups)</em></li>`;
+          const html = buildPreserveDataAdminEmailHtml({
+            adminName, adminMail, userName, userId,
+            groupContextName: fromGroupCtx ? currentDetailGroup.displayName : "user detail page",
+            removedGroupsHtml,
+          });
+          await GRAPH.sendMail(["portaladmin@evaasports.org"], `[EVAA Admin] ${userName} disabled — data preserved`, html);
+        } catch (err) { errors.push(`admin notify email: ${err.message}`); }
+        logAction("disabled user (temporary, data preserved)", userName, userId, { groupCount: removedGroups.length });
+        if (errors.length) showError(`Disable partial: ${errors.join("; ")}`);
+        else showToast(`${userName} disabled — account + data kept`);
       } else {
-        showToast(`${userName} offboarded fully`);
+        // Full offboard: remove license (idempotent) + stamp delete-tag for the auto-delete flow.
+        try { await GRAPH.removeUserLicense(userId); }
+        catch (err) { if (!/does not have a corresponding license/i.test(err.message)) errors.push(`license: ${err.message}`); }
+        try { await GRAPH.stampOffboardTag(userId); }
+        catch (err) { errors.push(`offboard tag: ${err.message}`); }
+        logAction("offboarded fully", userName, userId, { context: fromGroupCtx ? "group" : "user" });
+        if (errors.length > 0) showError(`Offboard partial: ${errors.length} step(s) failed. ${errors.join("; ")}`);
+        else showToast(`${userName} offboarded (no transfer)`);
       }
+
       $("remove-panel").classList.add("hidden");
       pendingRemove = null;
       if (fromGroupCtx) await refreshDetail();
