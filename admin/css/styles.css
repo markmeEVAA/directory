@@ -641,6 +641,7 @@ td a:hover { text-decoration: underline; }
 .state-disabled { background: #f8d7da; color: #721c24; }
 .state-preserved { background: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
 .state-offboarded { background: #6c757d; color: #fff; }
+.state-transferred { background: #cce5ff; color: #004085; border: 1px solid #9fcdff; }
 
 /* State-specific info banner on user detail */
 .user-state-banner {
@@ -659,6 +660,11 @@ td a:hover { text-decoration: underline; }
   background: #f8d7da;
   border: 1px solid #f5c6cb;
   color: #721c24;
+}
+.banner-transferred {
+  background: #cce5ff;
+  border: 1px solid #9fcdff;
+  color: #004085;
 }
 .btn-row { display: flex; gap: 8px; }
 

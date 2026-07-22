@@ -1153,7 +1153,7 @@
 
   async function fetchUserBasic(userId) {
     const token = await AUTH.getToken();
-    const resp = await fetch(`https://graph.microsoft.com/v1.0/users/${userId}?$select=id,displayName,mail,userPrincipalName,jobTitle,accountEnabled,assignedLicenses`, {
+    const resp = await fetch(`https://graph.microsoft.com/v1.0/users/${userId}?$select=id,displayName,mail,userPrincipalName,jobTitle,accountEnabled,assignedLicenses,onPremisesExtensionAttributes`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!resp.ok) throw new Error(`Graph ${resp.status}`);
@@ -1232,10 +1232,18 @@
     const stateBadge = $("user-account-state");
     const isDisabled = user.accountEnabled === false;
     const hasLicense = (user.assignedLicenses || []).length > 0;
-    const isFullyOffboarded = isDisabled && !hasLicense;
+    // extensionAttribute1 carries the lifecycle marker: "OFFBOARD:<date>" (scheduled for
+    // auto-delete) or "TRANSFERRED:<date>:<recipient>" (mailbox handed off, account KEPT).
+    const extAttr1 = (user.onPremisesExtensionAttributes || {}).extensionAttribute1 || "";
+    const isTransferred = isDisabled && !hasLicense && extAttr1.startsWith("TRANSFERRED:");
+    const transferredTo = isTransferred ? extAttr1.split(":").slice(2).join(":") : "";
+    const isFullyOffboarded = isDisabled && !hasLicense && !isTransferred;
     const isPreservedData = isDisabled && hasLicense;
 
-    if (isFullyOffboarded) {
+    if (isTransferred) {
+      stateBadge.textContent = "Transferred";
+      stateBadge.className = "account-state-badge state-transferred";
+    } else if (isFullyOffboarded) {
       stateBadge.textContent = "Fully offboarded";
       stateBadge.className = "account-state-badge state-offboarded";
     } else if (isPreservedData) {
@@ -1249,8 +1257,8 @@
     // Button visibility by state:
     //  Active  → Offboard shown, Re-enable hidden
     //  Preserved (disabled with license) → Offboard + Re-enable both shown
-    //  Fully offboarded → Re-enable only (Offboard is already done)
-    $("offboard-user-btn").classList.toggle("hidden", isFullyOffboarded);
+    //  Fully offboarded / Transferred → Offboard hidden (already done)
+    $("offboard-user-btn").classList.toggle("hidden", isFullyOffboarded || isTransferred);
     $("reenable-user-btn").classList.toggle("hidden", !isDisabled);
 
     // Delete is admin-only AND only offered on already-disabled accounts — you must
@@ -1261,7 +1269,7 @@
     $("add-user-to-group-btn").classList.toggle("hidden", isDisabled);
 
     // Show a state-specific info banner so admins immediately understand what's happening
-    renderUserStateBanner({ isFullyOffboarded, isPreservedData });
+    renderUserStateBanner({ isFullyOffboarded, isPreservedData, isTransferred, transferredTo, upn: user.userPrincipalName });
 
     // Render assigned licenses (best-effort: needs the SKU catalog)
     renderUserLicenses(user.assignedLicenses || []);
@@ -1319,8 +1327,24 @@
 
   // State-specific banner under the user header. Explains what's true + what's possible
   // so admins immediately understand a non-active user's status.
-  function renderUserStateBanner({ isFullyOffboarded, isPreservedData }) {
+  function renderUserStateBanner({ isFullyOffboarded, isPreservedData, isTransferred, transferredTo, upn }) {
     const banner = $("user-state-banner");
+    if (isTransferred) {
+      const recipient = transferredTo ? escapeHtml(transferredTo) : "another user";
+      const odUrl = upn ? `https://evaasports-my.sharepoint.com/personal/${escapeHtml(upn.replace(/[@.]/g, "_"))}` : null;
+      banner.className = "user-state-banner banner-transferred";
+      banner.innerHTML = `
+        <strong>This account was transferred, not deleted.</strong>
+        The mailbox (<code>${escapeHtml(upn || "the account")}</code>) was converted to a <strong>shared mailbox</strong> and handed to <strong>${recipient}</strong> (Full Access + Send As), who was also granted access to the OneDrive.
+        <br><br>
+        The account is kept disabled + unlicensed on purpose so the shared mailbox and files persist. It is <strong>not</strong> scheduled for deletion.
+        ${odUrl ? `<br><br><span class="muted">OneDrive: <a href="${odUrl}" target="_blank" rel="noopener">${odUrl}</a></span>` : ""}
+        <br><br>
+        <span class="muted">Add more delegates in the Exchange admin center (Recipients → the mailbox → Delegation). Deleting this account would remove ${recipient}'s access to the mailbox + files.</span>
+      `;
+      banner.classList.remove("hidden");
+      return;
+    }
     if (isFullyOffboarded) {
       banner.className = "user-state-banner banner-offboarded";
       banner.innerHTML = `
