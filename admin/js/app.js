@@ -736,24 +736,36 @@
         .join("");
     } catch (e) { /* non-fatal — picker just won't have options */ }
 
+    const groupsLine = `Remove from ${totalGroups} managed group${totalGroups === 1 ? "" : "s"}`;
     const ok = await confirmCustom({
-      body: `<p>Offboard <strong>${escapeHtml(userName)}</strong> fully?</p>
-        <p>This will:</p>
-        <ul>
-          <li>Remove from ${totalGroups} managed group${totalGroups === 1 ? "" : "s"}</li>
-          <li>Remove the EVAA license</li>
-          <li>Disable the account</li>
-        </ul>
-        <p class="warn-block">⚠ Exchange will start a <strong>30-day countdown</strong> to permanently delete the mailbox and OneDrive.</p>
-        <div style="margin:14px 0 4px;">
+      body: `<p>Offboard <strong>${escapeHtml(userName)}</strong>?</p>
+        <div style="margin:12px 0 4px;">
           <label for="admin-offboard-transfer-to" style="font-weight:600; display:block; margin-bottom:6px;">Hand this person's mailbox + OneDrive to (optional):</label>
-          <select id="admin-offboard-transfer-to" style="width:100%; padding:6px 8px; font-size:14px;">
+          <select id="admin-offboard-transfer-to" style="width:100%; padding:6px 8px; font-size:14px;"
+                  onchange="var t=this.value;document.getElementById('conseq-none').style.display=t?'none':'block';document.getElementById('conseq-xfer').style.display=t?'block':'none';">
             <option value="">— No transfer, just offboard —</option>
             ${transferOpts}
           </select>
-          <p class="muted" style="margin-top:6px;">If chosen, this is routed for admin approval; on approval the mailbox becomes a <strong>shared mailbox</strong> (Full Access + Send As) and the recipient is granted access to the OneDrive.</p>
         </div>
-        <p class="muted">Re-enable via this portal or Entra admin center within 30 days to recover.</p>`,
+        <div id="conseq-none">
+          <p style="margin-bottom:4px;">This will, immediately:</p>
+          <ul>
+            <li>${groupsLine}</li>
+            <li>Remove the EVAA license</li>
+            <li>Disable the account</li>
+          </ul>
+          <p class="warn-block">⚠ Mailbox + OneDrive are retained ~<strong>30 days</strong> then purged. The disabled account <strong>auto-deletes after 60 days</strong> unless re-enabled. Re-enable here or in Entra to recover within the window.</p>
+        </div>
+        <div id="conseq-xfer" style="display:none;">
+          <p style="margin-bottom:4px;">This is <strong>routed for admin approval</strong>. On approval it will:</p>
+          <ul>
+            <li>Convert the mailbox to a <strong>shared mailbox</strong> — recipient gets Full Access + Send As</li>
+            <li>Grant the recipient access to the <strong>OneDrive</strong></li>
+            <li>Remove the EVAA license and disable the account</li>
+            <li>${groupsLine}</li>
+            <li><strong>Keep the account</strong> (disabled, unlicensed) so the shared mailbox + OneDrive persist — it is <strong>not</strong> scheduled for deletion</li>
+          </ul>
+        </div>`,
       okLabel: "Offboard fully",
       okClass: "btn-danger",
     });
