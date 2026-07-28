@@ -232,7 +232,12 @@ const EMAILLISTS = (() => {
       _lastRegs = regs;
       renderList(regs);
     }
-    catch (e) { root().innerHTML = `<div class="card error-card"><h2>Couldn't load</h2><p>${esc(e.message)}</p></div>`; }
+    catch (e) {
+      const denied = /403|accessDenied|Access denied/i.test(e.message || "");
+      root().innerHTML = denied
+        ? `<div class="card"><h2>Email Lists</h2><p class="muted">Managing family lists in the portal isn't enabled for your account yet. You can still <strong>email your list(s) directly from Outlook</strong> — just send to the list address. To add or remove recipients, contact <a href="mailto:web-admin@evaasports.org">web-admin@evaasports.org</a>.</p></div>`
+        : `<div class="card error-card"><h2>Couldn't load</h2><p>${esc(e.message)}</p></div>`;
+    }
   }
 
   const slug = (s) => String(s || "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
