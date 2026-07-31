@@ -2226,12 +2226,13 @@
 
   // Strip a leading "EVAA -" the admin might type, then build the canonical pieces.
   function cgComputeNames() {
-    const isFusion = role === "fusionadmin";
+    // The SELECTED domain drives the org prefix: avfusion.org -> "Fusion - ", else "EVAA - ".
+    // (Graph can't set the domain at create; the group lands on the default domain and the
+    // nightly Exchange sync flips a "Fusion - *" group's primary to @avfusion.org.)
+    const domain = $("cg-domain").value;
+    const isFusion = domain === "avfusion.org";
     const prefix = isFusion ? "Fusion" : "EVAA";
     const raw = $("cg-name").value.trim().replace(/^(EVAA|Fusion)\s*-\s*/i, "").trim();
-    // Fusion admins always target avfusion.org (the group lands on the default domain first,
-    // then the Exchange sync flips the primary to @avfusion.org — see the create result note).
-    const domain = isFusion ? "avfusion.org" : $("cg-domain").value;
     const mailNickname = raw.toLowerCase().replace(/[^a-z0-9]+/g, "");
     const displayName = raw ? `${prefix} - ${raw}` : "";
     return { raw, domain, isFusion, mailNickname, displayName, mail: mailNickname ? `${mailNickname}@${domain}` : "" };
@@ -2261,14 +2262,15 @@
 
   async function openCreateGroupPanel() {
     $("create-group-form").reset();
-    const isFusion = role === "fusionadmin";
-    // Fusion admins create Fusion groups on @avfusion.org (fixed). Hide the domain picker
-    // and show the note explaining the address is set by the sync. EVAA admins pick a domain.
-    $("cg-domain").value = isFusion ? "avfusion.org" : "evaasports.org";
+    // Everyone sees + selects the domain. Fusion admins are locked to @avfusion.org (they
+    // only create Fusion groups); EVAA admins default to @evaasports.org and can pick either.
+    const lockFusion = role === "fusionadmin";
+    $("cg-domain").value = lockFusion ? "avfusion.org" : "evaasports.org";
+    $("cg-domain").disabled = lockFusion;
     const domainLabel = $("cg-domain").closest("label");
-    if (domainLabel) domainLabel.style.display = isFusion ? "none" : "";
+    if (domainLabel) domainLabel.style.display = "";
     $("cg-add-me-owner").checked = true;
-    $("cg-fusion-note").classList.toggle("hidden", !isFusion);
+    $("cg-fusion-note").classList.toggle("hidden", $("cg-domain").value !== "avfusion.org");
     $("cg-preview").innerHTML = "";
     cgOwnerPicker.reset();
     cgMemberPicker.reset();
