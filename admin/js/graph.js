@@ -95,6 +95,31 @@ const GRAPH = (() => {
     return callGraphAll(path);
   }
 
+  // Every Fusion-related group a Fusion admin should see — ALL types (M365, dynamic,
+  // distribution list, security), matching the M365 admin center's "fusion" search:
+  // anything named "Fusion …" plus EVAA-named groups with "Fusion" in them (e.g.
+  // "EVAA - Financial Aid - Softball (Fusion)"). The "Fusion Portal Admins" gate group
+  // is excluded — a Fusion admin must never manage the group that grants their own access.
+  async function listFusionGroups() {
+    const select = "id,displayName,mail,groupTypes,securityEnabled,mailEnabled,description";
+    // startswith avoids advanced-query ($search/endswith need ConsistencyLevel); every
+    // Fusion group is named "Fusion*", and the one EVAA-named exception is caught below.
+    const [fusionNamed, evaaNamed] = await Promise.all([
+      callGraphAll(`/groups?$filter=${encodeURIComponent("startswith(displayName,'Fusion')")}&$select=${select}&$top=100`),
+      callGraphAll(`/groups?$filter=${encodeURIComponent("startswith(displayName,'EVAA')")}&$select=${select}&$top=100`),
+    ]);
+    const evaaFusion = evaaNamed.filter((g) => /fusion/i.test(`${g.displayName || ""} ${g.mail || ""}`));
+    const seen = new Set();
+    const out = [];
+    for (const g of [...fusionNamed, ...evaaFusion]) {
+      if (g.id === FUSION_ADMIN_GROUP_ID) continue; // never expose the admin gate group
+      if (seen.has(g.id)) continue;
+      seen.add(g.id);
+      out.push(g);
+    }
+    return out;
+  }
+
   async function listGroupMembers(groupId) {
     // accountEnabled is selected so the UI can badge disabled (already-offboarded)
     // members and block a duplicate removal request against them.
@@ -556,6 +581,7 @@ const GRAPH = (() => {
     isFusionAdmin,
     getOwnedManagedGroupIds,
     listManagedGroups,
+    listFusionGroups,
     listGroupMembers,
     listGroupOwners,
     listAllManagedUsers,

@@ -154,10 +154,17 @@
     return;
   }
 
-  // A Fusion group = mail on @avfusion.org, or a "Fusion …" display name. These are the
-  // only groups a Fusion-scoped admin may see/manage.
-  function isFusionGroup(g) {
-    return /@avfusion\.org$/i.test(g.mail || "") || /^fusion\b/i.test(g.displayName || "");
+  // Is this group's membership editable via Graph? Classic distribution lists (not
+  // Unified, mail-enabled) are Exchange objects — Graph can't write their membership.
+  // Dynamic M365 groups have rule-based membership — members can't be edited manually
+  // (owners still can). Returns { canEditMembers, canEditOwners, kind }.
+  function groupEditability(g) {
+    const gt = g.groupTypes || [];
+    const isUnified = gt.includes("Unified");
+    const isDynamic = gt.includes("DynamicMembership");
+    if (!isUnified && g.mailEnabled) return { canEditMembers: false, canEditOwners: false, kind: "distribution list" };
+    if (isDynamic) return { canEditMembers: false, canEditOwners: true, kind: "dynamic group" };
+    return { canEditMembers: true, canEditOwners: true, kind: "group" };
   }
 
   // Role: admin / fusionadmin / owner / none.
@@ -170,7 +177,10 @@
     groups = allManagedGroups;
   } else if (isFusionAdmin) {
     role = "fusionadmin";
-    groups = allManagedGroups.filter(isFusionGroup);
+    // Load EVERY Fusion group (all types) — not just the Unified subset in allManagedGroups.
+    try { groups = await GRAPH.listFusionGroups(); }
+    catch (err) { showError("Failed to load Fusion groups: " + err.message); show("noAccess"); return; }
+    if (!groups.length) { show("noAccess"); return; }
   } else {
     $("loading-text").textContent = "Checking group ownership…";
     let ownedIds = [];
@@ -341,6 +351,22 @@
     currentDetailGroup = g;
     $("group-detail-name").textContent = g.displayName || "Group";
     $("group-detail-mail").textContent = g.mail || "";
+    // Group-type editability — distribution lists (Exchange) + dynamic groups limit editing.
+    const edit = groupEditability(g);
+    $("add-owner-btn").style.display = edit.canEditOwners ? "" : "none";
+    $("add-member-btn").style.display = edit.canEditMembers ? "" : "none";
+    // Delete via Graph works for M365/security groups but not classic distribution lists.
+    $("group-danger-zone").style.display = edit.kind === "distribution list" ? "none" : "";
+    const note = $("group-editability-note");
+    if (edit.kind === "distribution list") {
+      note.textContent = "This is a distribution list (managed in Exchange) — membership can't be edited from the portal yet.";
+      note.classList.remove("hidden");
+    } else if (edit.kind === "dynamic group") {
+      note.textContent = "This is a dynamic group — members are set automatically by a rule and can't be edited by hand. Owners can still be managed.";
+      note.classList.remove("hidden");
+    } else {
+      note.classList.add("hidden");
+    }
     $("owners-tbody").innerHTML = `<tr><td colspan="4" class="loading">Loading…</td></tr>`;
     $("members-tbody").innerHTML = `<tr><td colspan="4" class="loading">Loading…</td></tr>`;
     $("owners-count").textContent = "";
@@ -370,6 +396,7 @@
 
   async function refreshDetail() {
     if (!currentDetailGroup) return;
+    const edit = groupEditability(currentDetailGroup);
     try {
       const [owners, members] = await Promise.all([
         GRAPH.listGroupOwners(currentDetailGroup.id),
@@ -377,8 +404,8 @@
       ]);
       $("owners-count").textContent = owners.length;
       $("members-count").textContent = members.length;
-      $("owners-tbody").innerHTML = renderPeopleRows(owners, "no directors assigned", "owner");
-      $("members-tbody").innerHTML = renderPeopleRows(members, "no members", "member");
+      $("owners-tbody").innerHTML = renderPeopleRows(owners, "no directors assigned", "owner", edit.canEditOwners);
+      $("members-tbody").innerHTML = renderPeopleRows(members, "no members", "member", edit.canEditMembers);
       // Update the cached owner count in the groups list too
       state.ownerCounts.set(currentDetailGroup.id, owners.length);
     } catch (err) {
@@ -386,7 +413,7 @@
     }
   }
 
-  function renderPeopleRows(people, emptyMsg, rowRole) {
+  function renderPeopleRows(people, emptyMsg, rowRole, canRemove = true) {
     if (!people || people.length === 0) {
       return `<tr><td colspan="4" class="muted">${escapeHtml(emptyMsg)}</td></tr>`;
     }
@@ -395,13 +422,16 @@
       const alreadyRequested = submittedRemovals.has(p.id);
       // Lock the × when the account is already offboarded (disabled) or a removal
       // request was already filed this session — prevents a duplicate Remove request.
+      // (When the group itself isn't editable — DL / dynamic members — no × is shown.)
       const locked = isDisabled || alreadyRequested;
       const nameBadge = isDisabled
         ? ` <span class="badge badge-disabled" title="Account is disabled — already offboarded">disabled</span>`
         : (alreadyRequested
             ? ` <span class="badge badge-pending" title="Removal request filed — pending admin approval">removal requested</span>`
             : "");
-      const removeBtn = locked
+      const removeBtn = !canRemove
+        ? ""
+        : locked
         ? `<button class="btn-remove" disabled aria-label="${isDisabled ? "Already offboarded" : "Removal already requested"}" title="${isDisabled ? "Account already disabled/offboarded" : "Removal request already filed — pending admin approval"}">×</button>`
         : `<button class="btn-remove" data-user-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.displayName)}" data-email="${escapeHtml(p.mail || "")}" data-role="${rowRole}" aria-label="Remove">×</button>`;
       return `<tr>
