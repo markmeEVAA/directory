@@ -11,6 +11,9 @@ const GRAPH = (() => {
   const ADMIN_GROUP_IDS = [
     "98d51c39-149a-4dbf-9e86-1510035d8239", // EVAA Portal Admins
   ];
+  // Fusion-scoped admins: create/manage/remove Fusion (@avfusion.org) groups only.
+  // No EVAA SharePoint, no EVAA family-email data. Membership is hand-curated in Entra.
+  const FUSION_ADMIN_GROUP_ID = "bf11b914-4eb2-4cf4-8ae2-4fed8b7b2d6d"; // Fusion Portal Admins
 
   async function callGraph(path, options = {}) {
     const token = await AUTH.getToken();
@@ -64,6 +67,20 @@ const GRAPH = (() => {
       return Array.isArray(result.value) && result.value.some((id) => ADMIN_GROUP_IDS.includes(id));
     } catch (err) {
       console.error("Portal-admin check failed:", err);
+      return false;
+    }
+  }
+
+  // True if the current user is a Fusion Portal Admin (scoped admin for Fusion groups).
+  async function isFusionAdmin() {
+    try {
+      const result = await callGraph("/me/checkMemberGroups", {
+        method: "POST",
+        body: JSON.stringify({ groupIds: [FUSION_ADMIN_GROUP_ID] }),
+      });
+      return Array.isArray(result.value) && result.value.includes(FUSION_ADMIN_GROUP_ID);
+    } catch (err) {
+      console.error("Fusion-admin check failed:", err);
       return false;
     }
   }
@@ -178,6 +195,13 @@ const GRAPH = (() => {
       method: "PATCH",
       body: JSON.stringify(patch),
     });
+  }
+
+  // Delete a group. Graph DELETE is a SOFT delete for Microsoft 365 (Unified) groups:
+  // the group moves to deletedItems and is recoverable for ~30 days before it's purged.
+  // Used by the admin/Fusion-admin "Delete group" action (behind a typed confirmation).
+  async function deleteGroup(groupId) {
+    return callGraph(`/groups/${groupId}`, { method: "DELETE" });
   }
 
   // Owner ops
@@ -529,6 +553,7 @@ const GRAPH = (() => {
   return {
     getMe,
     isPortalAdmin,
+    isFusionAdmin,
     getOwnedManagedGroupIds,
     listManagedGroups,
     listGroupMembers,
@@ -537,6 +562,7 @@ const GRAPH = (() => {
     searchUsers,
     createGroup,
     updateGroup,
+    deleteGroup,
     getGroupSiteUrl,
     addOwner, removeOwner,
     addMember, removeMember,

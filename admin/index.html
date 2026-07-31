@@ -41,6 +41,10 @@
       <strong>Group owner view.</strong>
       You can submit Add or Remove requests for the groups you own; an admin will approve them. You can only see and act on groups where you are listed as an owner.
     </div>
+    <div class="role-banner role-banner-fusionadmin">
+      <strong>Fusion admin.</strong>
+      You can create, rename, manage members/owners, and delete <strong>Fusion</strong> groups directly. Changes apply immediately (no approval needed). Only Fusion groups are shown.
+    </div>
 
     <section id="signin-view" class="view hidden">
       <div class="card">
@@ -184,6 +188,11 @@
           </thead>
           <tbody id="members-tbody"></tbody>
         </table>
+      </div>
+
+      <div id="group-danger-zone" class="danger-zone cu-admin-only">
+        <button id="delete-group-btn" class="btn-danger">Delete this group…</button>
+        <span class="muted">Soft-deletes the group (recoverable ~30 days). Requires typing the name.</span>
       </div>
     </section>
 
@@ -508,10 +517,10 @@
           <h3>Create group</h3>
           <button id="create-group-close" class="modal-close" aria-label="Close">×</button>
         </div>
-        <p class="muted">Creates a Microsoft 365 group (mail-enabled, with SharePoint) — the same type as the existing <strong>EVAA&nbsp;-&nbsp;&lt;Sport&gt;</strong> board groups, so it can own a send-locked email list.</p>
+        <p class="muted">Creates a Microsoft 365 group (mail-enabled, with a SharePoint site) — the same type as the existing board groups.</p>
         <form id="create-group-form" class="create-user-form">
           <label>
-            <span>Group name * <span class="hint">(the part after "EVAA - ")</span></span>
+            <span>Group name * <span class="hint" id="cg-name-hint">(the part after the "EVAA - " / "Fusion - " prefix)</span></span>
             <input type="text" id="cg-name" required autocomplete="off" placeholder="e.g. Pickleball" />
           </label>
           <label>
@@ -522,7 +531,7 @@
             </select>
           </label>
           <p id="cg-preview" class="cg-preview muted"></p>
-          <p id="cg-fusion-note" class="hidden cg-warn">Heads-up: the <strong>avfusion.org</strong> domain provisioning is still pending (see EMAIL-LISTS.md). The group's primary address may land on the tenant default domain until Exchange is configured for Fusion.</p>
+          <p id="cg-fusion-note" class="hidden cg-warn">This Fusion group is created on <strong>@evaasports.org</strong> first, then the sync switches its primary address to <strong>@avfusion.org</strong> shortly after (Microsoft won't let the browser set the domain directly). Owners &amp; members work immediately either way.</p>
           <label>
             <span>Description <span class="hint">(optional)</span></span>
             <input type="text" id="cg-description" autocomplete="off" placeholder="e.g. Pickleball board / directors" />

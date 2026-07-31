@@ -1046,6 +1046,31 @@ body.viewmode-owner .role-banner-owner {
   border-radius: 0 4px 4px 0;
 }
 
+body.viewmode-fusionadmin .role-banner-fusionadmin {
+  display: block;
+  background: #eaf2fb;
+  border-left: 4px solid #1B4F8C;
+  padding: 10px 16px;
+  margin: 0 0 12px;
+  font-size: 0.9em;
+  color: #1a3a5c;
+  border-radius: 0 4px 4px 0;
+}
+
+/* Group detail "danger zone" — delete group (admin + Fusion admin) */
+.danger-zone {
+  margin-top: 28px;
+  padding: 14px 16px;
+  border: 1px solid #e3b9b9;
+  background: #fdf4f4;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.danger-zone .muted { font-size: 0.85em; }
+
 /* Hide admin-only UI elements when signed in as a non-admin group owner */
 body.viewmode-owner .tab-btn[data-tab="members"],
 body.viewmode-owner .tab-btn-audit,

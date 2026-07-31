@@ -134,6 +134,14 @@
     return;
   }
 
+  // Fusion-scoped admin: full create/manage/remove over Fusion (@avfusion.org) groups
+  // only, with no EVAA SharePoint. Only checked when the user isn't already a full admin.
+  let isFusionAdmin = false;
+  if (!isAdmin) {
+    try { isFusionAdmin = await GRAPH.isFusionAdmin(); }
+    catch (err) { console.warn("Fusion-admin check failed:", err); }
+  }
+
   // Load all managed groups first (we need them either way — admin gets all,
   // owner gets the subset they own).
   $("loading-text").textContent = "Loading groups…";
@@ -146,13 +154,23 @@
     return;
   }
 
-  // Tri-state role: admin / owner / none.
-  // Admins see everything. Owners see only the groups they own (with approval-routed Add/Remove).
+  // A Fusion group = mail on @avfusion.org, or a "Fusion …" display name. These are the
+  // only groups a Fusion-scoped admin may see/manage.
+  function isFusionGroup(g) {
+    return /@avfusion\.org$/i.test(g.mail || "") || /^fusion\b/i.test(g.displayName || "");
+  }
+
+  // Role: admin / fusionadmin / owner / none.
+  // Admins see everything. Fusion admins get full create/manage/remove but ONLY over
+  // Fusion groups. Owners see only the groups they own (with approval-routed Add/Remove).
   let role = "none";
   let groups;
   if (isAdmin) {
     role = "admin";
     groups = allManagedGroups;
+  } else if (isFusionAdmin) {
+    role = "fusionadmin";
+    groups = allManagedGroups.filter(isFusionGroup);
   } else {
     $("loading-text").textContent = "Checking group ownership…";
     let ownedIds = [];
@@ -183,6 +201,15 @@
   if (role !== "admin" && role !== "owner") {
     const elTab = document.querySelector('.tab-btn[data-tab="emaillists"]');
     if (elTab) elTab.style.display = "none";
+  }
+
+  // Fusion admins only manage groups — hide the EVAA-only tabs (Members / Reset / Audit
+  // touch the EVAA user directory + EVAA SharePoint, which Fusion admins don't get).
+  if (role === "fusionadmin") {
+    ["members", "reset", "audit"].forEach((t) => {
+      const btn = document.querySelector(`.tab-btn[data-tab="${t}"]`);
+      if (btn) btn.style.display = "none";
+    });
   }
 
   // State for groups view
@@ -394,7 +421,7 @@
   // Rename group (admin-only) — edits the friendly displayName via Graph PATCH.
   // The email address (mailNickname) is unchanged; only the display name moves.
   async function editGroupName() {
-    if (role !== "admin" || !currentDetailGroup) return;
+    if (!(role === "admin" || role === "fusionadmin") || !currentDetailGroup) return;
     const current = currentDetailGroup.displayName || "";
     const ok = await confirmCustom({
       title: "Rename group",
@@ -422,6 +449,53 @@
   }
   $("edit-group-name-btn").addEventListener("click", editGroupName);
 
+  // Delete group (admin + Fusion admin). Graph DELETE is a soft delete — recoverable for
+  // ~30 days in the M365 deleted-groups bin, then purged. Requires typing the group name.
+  $("delete-group-btn").addEventListener("click", async () => {
+    if (!currentDetailGroup || !(role === "admin" || role === "fusionadmin")) return;
+    const g = currentDetailGroup;
+    const confirmName = g.displayName || "";
+    const ok = await confirmCustom({
+      title: "Delete group",
+      body: `
+        <p>Permanently delete the group <strong>${escapeHtml(g.displayName)}</strong> (<code>${escapeHtml(g.mail || "—")}</code>)?</p>
+        <ul>
+          <li>The group is <strong>soft-deleted</strong> — recoverable for <strong>30 days</strong> in the Microsoft 365 deleted-groups bin, then <strong>permanently purged</strong>.</li>
+          <li>Its mailbox, SharePoint site, and every owner/member link go away.</li>
+        </ul>
+        <p class="muted">Everyone in it loses access immediately. This can't be undone from the portal.</p>
+        <label for="delete-group-confirm-input" style="font-weight:600; display:block; margin:12px 0 6px;">Type <code>${escapeHtml(confirmName)}</code> to confirm:</label>
+        <input type="text" id="delete-group-confirm-input" autocomplete="off" style="width:100%; padding:6px 8px; font-size:14px;" />`,
+      okLabel: "Delete group",
+      okClass: "btn-danger",
+    });
+    if (!ok) return;
+    const typed = ($("delete-group-confirm-input")?.value || "").trim();
+    if (typed !== confirmName) {
+      showError(`Deletion cancelled — you typed "${typed}", which doesn't match "${confirmName}".`);
+      return;
+    }
+    const btn = $("delete-group-btn");
+    btn.disabled = true;
+    const origText = btn.textContent;
+    btn.textContent = "Deleting…";
+    try {
+      await GRAPH.deleteGroup(g.id);
+      logAction("deleted group", g.displayName, g.id, { group: g.displayName, mail: g.mail || "" });
+      const idx = state.groups.findIndex((x) => x.id === g.id);
+      if (idx >= 0) state.groups.splice(idx, 1);
+      state.ownerCounts.delete(g.id);
+      currentDetailGroup = null;
+      showToast(`Group "${g.displayName}" deleted`);
+      show("groups");
+      renderGroupsTable();
+    } catch (err) {
+      showError(`Delete failed: ${err.message}`);
+      btn.disabled = false;
+      btn.textContent = origText;
+    }
+  });
+
   // ---- Phase 2.1: Add/Remove directors + members ----
 
   // Smart remove: open the confirm modal with per-group vs full-offboard options.
@@ -440,10 +514,14 @@
   function wireRemoveHandlers() {
     ["owners-tbody", "members-tbody"].forEach((id) => {
       $(id).addEventListener("click", async (e) => {
-        // Cross-nav: clicking the person's name jumps to their user detail page
+        // Cross-nav: clicking the person's name jumps to their user detail page.
+        // Fusion admins are scoped to group management only — no jump into the EVAA
+        // user directory / user-detail admin surface.
         const jumpBtn = e.target.closest(".link-button[data-jump-user-id]");
         if (jumpBtn) {
-          jumpToUser(jumpBtn.dataset.jumpUserId, { id: jumpBtn.dataset.jumpUserId, displayName: jumpBtn.dataset.userName });
+          if (role !== "fusionadmin") {
+            jumpToUser(jumpBtn.dataset.jumpUserId, { id: jumpBtn.dataset.jumpUserId, displayName: jumpBtn.dataset.userName });
+          }
           return;
         }
         const btn = e.target.closest(".btn-remove");
@@ -455,6 +533,28 @@
 
         btn.disabled = true;
         btn.textContent = "…";
+
+        // FUSION ADMIN: simple group-only removal — no offboard/disable/license machinery
+        // (that's EVAA user-lifecycle, which Fusion admins don't touch).
+        if (role === "fusionadmin") {
+          const ok = await confirmCustom({
+            body: `<p>Remove <strong>${escapeHtml(userName)}</strong> as a ${rowRole === "owner" ? "director (owner)" : "member"} of <strong>${escapeHtml(currentDetailGroup.displayName)}</strong>?</p>
+              <p class="muted">This only removes them from this group — their account is untouched.</p>`,
+            okLabel: "Remove",
+            okClass: "btn-warning",
+          });
+          if (!ok) { btn.disabled = false; btn.textContent = "×"; return; }
+          try {
+            if (rowRole === "owner") await GRAPH.removeOwner(currentDetailGroup.id, userId);
+            else await GRAPH.removeMember(currentDetailGroup.id, userId);
+            logAction(`removed ${rowRole} (per-group only)`, userName, userId);
+            await refreshDetail();
+          } catch (err) {
+            showError(`Failed to remove ${userName}: ${err.message}`);
+            btn.disabled = false; btn.textContent = "×";
+          }
+          return;
+        }
 
         // OWNER MODE: skip the 3-option modal. Capture the owner's intent for the
         // user's mailbox/account so the admin's approval email has full context.
@@ -2126,11 +2226,15 @@
 
   // Strip a leading "EVAA -" the admin might type, then build the canonical pieces.
   function cgComputeNames() {
-    const raw = $("cg-name").value.trim().replace(/^EVAA\s*-\s*/i, "").trim();
-    const domain = $("cg-domain").value;
+    const isFusion = role === "fusionadmin";
+    const prefix = isFusion ? "Fusion" : "EVAA";
+    const raw = $("cg-name").value.trim().replace(/^(EVAA|Fusion)\s*-\s*/i, "").trim();
+    // Fusion admins always target avfusion.org (the group lands on the default domain first,
+    // then the Exchange sync flips the primary to @avfusion.org — see the create result note).
+    const domain = isFusion ? "avfusion.org" : $("cg-domain").value;
     const mailNickname = raw.toLowerCase().replace(/[^a-z0-9]+/g, "");
-    const displayName = raw ? `EVAA - ${raw}` : "";
-    return { raw, domain, mailNickname, displayName, mail: mailNickname ? `${mailNickname}@${domain}` : "" };
+    const displayName = raw ? `${prefix} - ${raw}` : "";
+    return { raw, domain, isFusion, mailNickname, displayName, mail: mailNickname ? `${mailNickname}@${domain}` : "" };
   }
 
   function cgRefreshPreview() {
@@ -2157,9 +2261,14 @@
 
   async function openCreateGroupPanel() {
     $("create-group-form").reset();
-    $("cg-domain").value = "evaasports.org";
+    const isFusion = role === "fusionadmin";
+    // Fusion admins create Fusion groups on @avfusion.org (fixed). Hide the domain picker
+    // and show the note explaining the address is set by the sync. EVAA admins pick a domain.
+    $("cg-domain").value = isFusion ? "avfusion.org" : "evaasports.org";
+    const domainLabel = $("cg-domain").closest("label");
+    if (domainLabel) domainLabel.style.display = isFusion ? "none" : "";
     $("cg-add-me-owner").checked = true;
-    $("cg-fusion-note").classList.add("hidden");
+    $("cg-fusion-note").classList.toggle("hidden", !isFusion);
     $("cg-preview").innerHTML = "";
     cgOwnerPicker.reset();
     cgMemberPicker.reset();
@@ -2192,7 +2301,7 @@
 
   $("create-group-form").addEventListener("submit", async (e) => {
     e.preventDefault();
-    const { raw, domain, mailNickname, displayName, mail } = cgComputeNames();
+    const { raw, domain, isFusion, mailNickname, displayName, mail } = cgComputeNames();
     const description = $("cg-description").value.trim();
     if (!mailNickname) { showError("Group name must contain at least one letter or number."); return; }
 
@@ -2304,6 +2413,7 @@
     result.classList.remove("hidden");
     result.innerHTML = `<h4>✓ Group created</h4>
       <p class="success-note"><strong>${escapeHtml(created.displayName || displayName)}</strong> · <code>${escapeHtml(displayMail)}</code></p>
+      ${isFusion ? `<p class="cg-warn">Its address is on <strong>${escapeHtml(mailNickname)}@evaasports.org</strong> right now; the sync switches the primary to <strong>${escapeHtml(mailNickname)}@avfusion.org</strong> shortly. Owners &amp; members already work.</p>` : ""}
       <p class="muted">It may take a minute to appear everywhere in Microsoft 365. Open it from the groups list to manage owners and members.</p>
       <div class="modal-actions"><button id="cg-done" class="btn-primary">Done</button></div>`;
     $("cg-done").addEventListener("click", () => {
