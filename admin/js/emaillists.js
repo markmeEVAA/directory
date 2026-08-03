@@ -12,12 +12,30 @@ const EMAILLISTS = (() => {
   const TEAMCAT = "6ee018fd-c2b6-42a4-add0-3910452b690d";    // TeamCatalog (SE Programs teams + counts)
   const REGCAT  = "3e3ed978-37e0-4d72-b1e1-bcced6892ce2";    // RegistrationCatalog (available registrations + counts)
   let _lastRegs = [];   // scoped lists from the last load(), reused by the composer
-  // Power Automate flow SAS URL that fires the GitHub sync on edits (true ~5-min apply).
-  // Empty string = edits apply at the nightly sync instead. Set this once the flow exists.
-  const TRIGGER_URL = "";
-  async function triggerSync() {
+  // Power Automate flow SAS URL that fires the GitHub sync (POSTs {"source": ...} here; the flow
+  // forwards to sync-email-lists.yml's workflow_dispatch API with that as the `source` input).
+  // Flow: "EVAA - Email List Sync Trigger" (env Default-b5897a1b-b85b-42bd-8e61-9b021b67d2ce,
+  // flow id 568e97e4-01f9-494a-ba51-0ae52e6aa210). Empty string = edits apply at the next
+  // scheduled sync instead.
+  const TRIGGER_URL = "https://defaultb5897a1bb85b42bd8e619b021b67d2.ce.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/31/workflows/cce849360a79496bb4428a570a9d665c/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=puK2G_j5APlXhKdduGDutbgdflc7RWuWtV6WLWUVGsg";
+  // The workflow's own gate applies a 10-minute cooldown per dispatch, so a burst of edits
+  // collapses server-side too — this debounce just avoids firing one request per keystroke-ish edit.
+  const SYNC_DEBOUNCE_MS = 45 * 1000;
+  const SYNC_COOLDOWN_MS = 10 * 60 * 1000;
+  const SYNC_COOLDOWN_KEY = "evaa-emaillist-last-admin-sync";
+  async function fireDispatch(source) {
     if (!TRIGGER_URL) return;
-    try { await fetch(TRIGGER_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }); } catch (e) { /* non-fatal */ }
+    await fetch(TRIGGER_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ source }) });
+  }
+  let _syncDebounceTimer = null;
+  function triggerSync() {
+    if (!TRIGGER_URL) return;
+    if (_syncDebounceTimer) clearTimeout(_syncDebounceTimer);
+    _syncDebounceTimer = setTimeout(async () => {
+      _syncDebounceTimer = null;
+      try { await fireDispatch("director-edit"); toast("Sync requested — your change should apply within ~10 minutes."); }
+      catch (e) { toast("Saved, but couldn't reach the sync trigger — it'll still apply at the next scheduled sync.", "error"); }
+    }, SYNC_DEBOUNCE_MS);
   }
 
   async function _g(path, options = {}) {
@@ -32,12 +50,28 @@ const EMAILLISTS = (() => {
     const t = await resp.text(); return t ? JSON.parse(t) : null;
   }
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  function toast(msg) {
+  function toast(msg, kind = "success") {
     const b = document.getElementById("toast-banner");
     if (!b) return;
     document.getElementById("toast-text").textContent = msg;
-    b.className = "toast-banner toast-success"; b.classList.remove("hidden");
+    b.className = "toast-banner toast-" + kind; b.classList.remove("hidden");
     setTimeout(() => b.classList.add("hidden"), 4000);
+  }
+  function syncCooldownRemainingMs() {
+    const last = +localStorage.getItem(SYNC_COOLDOWN_KEY) || 0;
+    return Math.max(0, SYNC_COOLDOWN_MS - (Date.now() - last));
+  }
+  // Reflects the cooldown on the admin "Sync now" button and re-checks itself until it clears.
+  function applySyncButtonState(btn) {
+    const remain = syncCooldownRemainingMs();
+    if (remain > 0) {
+      btn.disabled = true;
+      btn.textContent = `Synced — next in ${Math.ceil(remain / 60000)}m`;
+      setTimeout(() => { if (document.body.contains(btn)) applySyncButtonState(btn); }, Math.min(remain, 30000));
+    } else {
+      btn.disabled = false;
+      btn.textContent = "↻ Sync now";
+    }
   }
 
   async function getRegistry() {
@@ -230,7 +264,7 @@ const EMAILLISTS = (() => {
         regs = regs.filter((x) => ownedMails.has((x.f.BoardGroup || "").toLowerCase()));
       }
       _lastRegs = regs;
-      renderList(regs);
+      renderList(regs, isAdmin);
     }
     catch (e) {
       const denied = /403|accessDenied|Access denied/i.test(e.message || "");
@@ -296,7 +330,7 @@ const EMAILLISTS = (() => {
   const LIST_KIND_LABEL = { reg: "Registration family lists", teams: "Team family lists", coaches: "Coaches lists", custom: "Custom lists" };
   const divisionOf = (f) => [f.Gender, f.AgeGroup].filter((v) => v && v !== "All").join(" ");
 
-  function renderList(regs) {
+  function renderList(regs, isAdmin) {
     const createUI = `
       <div class="section-header" style="align-items:center">
         <h2>Email Lists</h2>
@@ -304,6 +338,7 @@ const EMAILLISTS = (() => {
           <button class="btn-secondary" id="el-send-btn">✉ Send to lists</button>
           <button class="btn-secondary" id="el-se-btn">+ Create from SportsEngine</button>
           <button class="btn-secondary" id="el-create-btn">+ Create custom list</button>
+          ${isAdmin ? '<button class="btn-secondary" id="el-sync-btn" title="Force a sync now instead of waiting for the next scheduled/change-triggered run">↻ Sync now</button>' : ""}
         </div>
       </div>
       <div id="el-create-form" class="hidden" style="margin:0 0 14px;padding:12px;background:#f4f6f9;border-radius:8px">
@@ -350,6 +385,22 @@ const EMAILLISTS = (() => {
 
     document.getElementById("el-send-btn").addEventListener("click", openCompose);
     document.getElementById("el-se-btn").addEventListener("click", openSeCreate);
+    const syncBtn = document.getElementById("el-sync-btn");
+    if (syncBtn) {
+      applySyncButtonState(syncBtn);
+      syncBtn.addEventListener("click", async () => {
+        if (!TRIGGER_URL) { toast("Sync trigger isn't configured yet.", "error"); return; }
+        syncBtn.disabled = true; syncBtn.textContent = "Syncing…";
+        try {
+          await fireDispatch("admin-button");
+          localStorage.setItem(SYNC_COOLDOWN_KEY, String(Date.now()));
+          toast("Sync requested — should apply within ~10 minutes.");
+        } catch (e) {
+          toast("Couldn't reach the sync trigger: " + e.message, "error");
+        }
+        applySyncButtonState(syncBtn);
+      });
+    }
     document.getElementById("el-create-btn").addEventListener("click", async () => {
       const form = document.getElementById("el-create-form");
       form.classList.toggle("hidden");
