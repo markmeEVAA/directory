@@ -5,6 +5,12 @@
 (async function main() {
   // DOM refs
   const $ = (id) => document.getElementById(id);
+  // Matches any EVAA/Fusion group regardless of type (Microsoft 365 vs security) — used when
+  // disabling/offboarding a user so security groups like "EVAA - Sport Leadership" (which
+  // listManagedGroups()'s Unified-only filter never returns) still get stripped. A disabled
+  // account left in that group kept showing up on the public roster pages after being
+  // "removed" via the portal, since those pages are built from group membership + jobTitle.
+  const isEvaaOrFusionGroup = (g) => /^(EVAA|Fusion)\b/i.test(g.displayName || "");
   const views = {
     signin: $("signin-view"),
     noAccess: $("no-access-view"),
@@ -677,13 +683,13 @@
           return;
         }
 
-        // Query what other managed groups this user is in (excluding this one).
+        // Query what other EVAA/Fusion groups this user is in (excluding this one) — not just
+        // the Unified-only "managed" set, so security groups get caught too (see isEvaaOrFusionGroup).
         let otherManagedGroups = [];
         try {
           const allGroups = await GRAPH.getUserMemberOf(userId);
-          const managedIds = new Set(state.groups.map((g) => g.id));
           otherManagedGroups = allGroups.filter(
-            (g) => managedIds.has(g.id) && g.id !== currentDetailGroup.id
+            (g) => isEvaaOrFusionGroup(g) && g.id !== currentDetailGroup.id
           );
         } catch (err) {
           // Non-fatal — just means we can't show the "also in" list. Continue with empty list.
@@ -1789,8 +1795,7 @@
     let managedGroups = [];
     try {
       const all = await GRAPH.getUserMemberOf(u.id);
-      const managedIds = new Set(state.groups.map((g) => g.id));
-      managedGroups = all.filter((g) => managedIds.has(g.id));
+      managedGroups = all.filter(isEvaaOrFusionGroup);
     } catch (err) {
       console.warn("Could not fetch user's groups for offboard modal:", err);
     }
