@@ -139,13 +139,26 @@ const EMAILLISTS = (() => {
     }
     await _g(`/sites/${SITE}/lists/${REGISTRY}/items/${itemId}/fields`, { method: "PATCH", body: JSON.stringify(fields) });
   }
+  // A freshly created/imported list has no live DL until the next sync builds it -- distinguish
+  // "not built yet" from "built but empty" so the detail view doesn't just look broken.
   async function getMembers(dlMail) {
     const g = await _g(`/groups?$filter=${encodeURIComponent("mail eq '" + dlMail + "'")}&$select=id`);
-    if (!g.value || !g.value.length) return [];
+    if (!g.value || !g.value.length) return { members: [], groupExists: false };
     const id = g.value[0].id;
     const out = []; let next = `/groups/${id}/members?$select=id,displayName,mail&$top=200`;
     while (next) { const d = await _g(next); out.push(...(d.value || [])); next = d["@odata.nextLink"] || null; }
-    return out.filter((m) => m.mail);
+    return { members: out.filter((m) => m.mail), groupExists: true };
+  }
+  // Pending "Add" overrides for a registration -- used to show what's queued when the list's
+  // live DL doesn't exist yet (see getMembers above).
+  async function getOverrides(reg) {
+    if (_useBridge) {
+      const boardGroupMail = await _primaryBoardGroup();
+      const rows = await _bridge("get_overrides", { boardGroupMail, registrationId: String(reg) });
+      return (rows || []).map((r) => _normalizeConnectorItem(r).f);
+    }
+    const r = await _g(`/sites/${SITE}/lists/${OVERRIDES}/items?$expand=fields&$top=999`);
+    return (r.value || []).map((i) => i.fields).filter((f) => String(f.RegistrationId || "") === String(reg));
   }
   async function addOverride(reg, action, email, name) {
     const me = await GRAPH.getMe();
@@ -461,7 +474,11 @@ const EMAILLISTS = (() => {
     regs.forEach((x) => { const k = listKind(x.f); (groupedRegs[k] = groupedRegs[k] || []).push(x); });
     const rowFor = (x) => { const f = x.f;
       const type = (String(f.RegistrationId || "").startsWith("manual-")) ? "custom" : (f.Category || f.Sport || "");
-      return `<tr data-reg="${esc(f.RegistrationId)}" data-mail="${esc(f.Title)}" data-itemid="${esc(x.id)}" data-expires="${esc((f.ExpiresOn || "").slice(0, 10))}" data-catgroup="${listKind(f)}" data-cat="${esc(f.Category || "")}" data-gender="${esc(f.Gender || "")}" data-age="${esc(f.AgeGroup || "")}" data-text="${esc(String(f.Title || "").toLowerCase())}" style="cursor:pointer"><td>${esc(f.Title)}</td><td>${esc(type)}</td><td>${esc(divisionOf(f))}</td><td>${esc(f.RecipientCount)}</td><td>${esc((f.ExpiresOn || "").slice(0, 10) || "—")}</td></tr>`;
+      // "filter address…" searches the Title, but the visible Type column shows "custom"/a
+      // sport name that isn't part of the Title -- fold it (+ the section label) into the
+      // searchable text so typing e.g. "custom" actually matches the rows that display it.
+      const searchText = [f.Title, type, LIST_KIND_LABEL[listKind(f)]].filter(Boolean).join(" ").toLowerCase();
+      return `<tr data-reg="${esc(f.RegistrationId)}" data-mail="${esc(f.Title)}" data-itemid="${esc(x.id)}" data-expires="${esc((f.ExpiresOn || "").slice(0, 10))}" data-catgroup="${listKind(f)}" data-cat="${esc(f.Category || "")}" data-gender="${esc(f.Gender || "")}" data-age="${esc(f.AgeGroup || "")}" data-text="${esc(searchText)}" style="cursor:pointer"><td>${esc(f.Title)}</td><td>${esc(type)}</td><td>${esc(divisionOf(f))}</td><td>${esc(f.RecipientCount)}</td><td>${esc((f.ExpiresOn || "").slice(0, 10) || "—")}</td></tr>`;
     };
     const tableBody = LIST_KINDS.filter((k) => groupedRegs[k] && groupedRegs[k].length).map((k) => {
       const items = groupedRegs[k].slice().sort((a, b) => String(a.f.Title).localeCompare(String(b.f.Title)));
@@ -529,11 +546,19 @@ const EMAILLISTS = (() => {
   async function openDetail(reg, mail, itemId, expires) {
     root().innerHTML = `<div class="card"><button class="btn-link back-link" id="el-back">← Back to lists</button><h2>${esc(mail)}</h2><p class="loading">Loading recipients…</p></div>`;
     document.getElementById("el-back").addEventListener("click", load);
-    try { renderDetail(reg, mail, await getMembers(mail), itemId, expires); }
+    try {
+      const { members, groupExists } = await getMembers(mail);
+      // Not built yet (e.g. just created/imported, first sync hasn't run) -- show what's queued
+      // instead of an empty table that looks broken.
+      const pendingAdds = groupExists ? [] : (await getOverrides(reg)).filter((f) => (f.ActionType || "Add") === "Add");
+      renderDetail(reg, mail, members, itemId, expires, groupExists, pendingAdds);
+    }
     catch (e) { root().querySelector(".loading").textContent = "Couldn't load recipients: " + e.message; }
   }
 
-  function renderDetail(reg, mail, members, itemId, expires) {
+  function renderDetail(reg, mail, members, itemId, expires, groupExists, pendingAdds) {
+    const displayRows = groupExists ? members : (pendingAdds || []).map((f) => ({ mail: f.Email, displayName: f.RecipientName || "" }));
+    const notBuiltBanner = groupExists ? "" : `<p style="background:#fff7e6;border:1px solid #ffe1a8;padding:8px;border-radius:6px;margin:0 0 12px">This list hasn't built yet — <strong>${displayRows.length}</strong> recipient${displayRows.length === 1 ? "" : "s"} queued, applies at the next sync (nightly, or an admin can "Sync now" from the main list page).</p>`;
     root().innerHTML = `<div class="card">
       <button class="btn-link back-link" id="el-back">← Back to lists</button>
       <h2>${esc(mail)}</h2>
@@ -541,7 +566,8 @@ const EMAILLISTS = (() => {
         <div class="muted">Auto-retires <strong id="el-expires">${esc(expires || "—")}</strong> · <button class="btn-link" id="el-edit-expiry">retire earlier…</button></div>
         <button class="btn-danger" id="el-delete-list">Delete entire list</button>
       </div>
-      <p class="muted"><strong>${members.length}</strong> recipients. Add or remove below — changes are <em>queued</em> and applied at the next sync. The list itself is rebuilt from registrations automatically; your removals are remembered so they won't be re-added.</p>
+      ${notBuiltBanner}
+      <p class="muted"><strong>${displayRows.length}</strong> recipients. Add or remove below — changes are <em>queued</em> and applied at the next sync. The list itself is rebuilt from registrations automatically; your removals are remembered so they won't be re-added.</p>
       <div class="toolbar">
         <input type="email" id="el-add-email" placeholder="add an email…" style="min-width:240px" />
         <input type="text" id="el-add-name" placeholder="name (optional)" />
@@ -560,7 +586,7 @@ const EMAILLISTS = (() => {
       </div>
       <input type="search" id="el-filter" placeholder="filter recipients…" style="margin:10px 0;width:100%;padding:6px" />
       <table class="data-table"><thead><tr><th>Email</th><th>Name</th><th class="col-actions"></th></tr></thead>
-      <tbody id="el-tbody">${members.map((m) => `<tr data-email="${esc(m.mail)}"><td>${esc(m.mail)}</td><td>${esc(m.displayName || "")}</td><td><button class="btn-link el-remove" style="color:#b00020">remove</button></td></tr>`).join("")}</tbody></table></div>`;
+      <tbody id="el-tbody">${displayRows.map((m) => `<tr data-email="${esc(m.mail)}"${groupExists ? "" : ' style="background:#fffbe6"'}><td>${esc(m.mail)}</td><td>${esc(m.displayName || "")}${groupExists ? "" : ' <span class="muted">(queued)</span>'}</td><td><button class="btn-link el-remove" style="color:#b00020">remove</button></td></tr>`).join("")}</tbody></table></div>`;
     document.getElementById("el-back").addEventListener("click", load);
 
     document.getElementById("el-add-btn").addEventListener("click", async () => {
@@ -768,7 +794,8 @@ const EMAILLISTS = (() => {
     const groups = {};
     lists.forEach((x) => { const k = listKind(x.f); (groups[k] = groups[k] || []).push(x); });
     const rowFor = (x, k) => { const f = x.f; const div = divisionOf(f);
-      return `<label class="cm-row" style="display:block;margin:3px 0" data-cat="${esc(f.Category || "")}" data-gender="${esc(f.Gender || "")}" data-age="${esc(f.AgeGroup || "")}" data-text="${esc(String(f.Title || "").toLowerCase())}" data-group="${k}">
+      const searchText = [f.Title, LIST_KIND_LABEL[k]].filter(Boolean).join(" ").toLowerCase();
+      return `<label class="cm-row" style="display:block;margin:3px 0" data-cat="${esc(f.Category || "")}" data-gender="${esc(f.Gender || "")}" data-age="${esc(f.AgeGroup || "")}" data-text="${esc(searchText)}" data-group="${k}">
           <input type="checkbox" class="cm-list" data-mail="${esc(f.Title)}" data-count="${esc(f.RecipientCount || 0)}" data-group="${k}"> ${esc(f.Title)}${div ? ` <span class="muted">· ${esc(div)}</span>` : ""} <span class="muted">· ${esc(f.RecipientCount || 0)} recipients</span>
         </label>`;
     };
