@@ -95,6 +95,18 @@ const GRAPH = (() => {
     return callGraphAll(path);
   }
 
+  // Every EVAA/Fusion group regardless of type (Unified, security, distribution) —
+  // unlike listManagedGroups(), does NOT restrict to groupTypes/any(c:c eq 'Unified').
+  // Needed anywhere a security group must be selectable (e.g. "EVAA - Sport Leadership",
+  // which the roster-publish picker needs but listManagedGroups() would never return).
+  async function listAllEvaaFusionGroups() {
+    const filter = "startswith(displayName,'EVAA') or startswith(displayName,'Fusion')";
+    const select = "id,displayName,mail,groupTypes,securityEnabled,mailEnabled,description";
+    const path = `/groups?$filter=${encodeURIComponent(filter)}&$select=${select}&$top=100`;
+    const groups = await callGraphAll(path);
+    return groups.filter((g) => g.id !== ADMIN_GROUP_IDS[0] && g.id !== FUSION_ADMIN_GROUP_ID);
+  }
+
   // Every Fusion-related group a Fusion admin should see — ALL types (M365, dynamic,
   // distribution list, security), matching the M365 admin center's "fusion" search:
   // anything named "Fusion …" plus EVAA-named groups with "Fusion" in them (e.g.
@@ -581,6 +593,7 @@ const GRAPH = (() => {
     isFusionAdmin,
     getOwnedManagedGroupIds,
     listManagedGroups,
+    listAllEvaaFusionGroups,
     listFusionGroups,
     listGroupMembers,
     listGroupOwners,

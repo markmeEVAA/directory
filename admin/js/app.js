@@ -23,6 +23,7 @@
     reset: $("reset-view"),
     audit: $("audit-view"),
     emaillists: $("emaillists-view"),
+    rosterpages: $("rosterpages-view"),
   };
   const tabNav = $("tab-nav");
   const userArea = $("user-area");
@@ -219,6 +220,13 @@
     if (elTab) elTab.style.display = "none";
   }
 
+  // Roster Pages tab: admin-only (unlike Email Lists, this isn't scoped per-sport --
+  // it controls which groups get published to the public website org-wide).
+  if (role !== "admin") {
+    const rpTab = document.querySelector('.tab-btn[data-tab="rosterpages"]');
+    if (rpTab) rpTab.style.display = "none";
+  }
+
   // Fusion admins only manage groups — hide the EVAA-only tabs (Members / Reset / Audit
   // touch the EVAA user directory + EVAA SharePoint, which Fusion admins don't get).
   if (role === "fusionadmin") {
@@ -316,6 +324,7 @@
       else if (activeTab === "reset") show("reset");
       else if (activeTab === "audit") { show("audit"); ensureAuditLoaded(); }
       else if (activeTab === "emaillists") { show("emaillists"); EMAILLISTS.load(); }
+      else if (activeTab === "rosterpages") { show("rosterpages"); ROSTERPAGES.load(); }
       else { show("members"); ensureMembersLoaded(); }
     });
   });
