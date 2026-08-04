@@ -416,7 +416,8 @@ const EMAILLISTS = (() => {
   // Shared Type/Gender/Age/text filter bar — used by both the list screen and the send composer.
   function filterControls(regs, prefix) {
     const optList = (label, vals) => `<option value="">${label}</option>` + vals.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join("");
-    const cats = distinctVals(regs, "Category"), genders = distinctVals(regs, "Gender"), ages = distinctVals(regs, "AgeGroup");
+    const cats = [...new Set(regs.map((x) => effectiveType(x.f)).filter((v) => v && v !== "All"))].sort();
+    const genders = distinctVals(regs, "Gender"), ages = distinctVals(regs, "AgeGroup");
     if (!(cats.length || genders.length || ages.length)) return "";
     return `<div class="toolbar" style="gap:8px;margin:4px 0 10px;flex-wrap:wrap">
         <select id="${prefix}-cat" style="padding:5px">${optList("All types", cats)}</select>
@@ -448,6 +449,10 @@ const EMAILLISTS = (() => {
   const LIST_KINDS = ["reg", "teams", "coaches", "custom"];
   const LIST_KIND_LABEL = { reg: "Registration family lists", teams: "Team family lists", coaches: "Coaches lists", custom: "Custom lists" };
   const divisionOf = (f) => [f.Gender, f.AgeGroup].filter((v) => v && v !== "All").join(" ");
+  // What the "Type" column displays, and what the type filter dropdown should match against --
+  // must be the SAME derivation, or selecting a value shown in the column silently filters out
+  // rows whose raw Category field happens to be blank (custom lists rarely set it).
+  const effectiveType = (f) => (listKind(f) === "custom") ? "custom" : (f.Category || f.Sport || "");
 
   function renderList(regs, isAdmin) {
     const createUI = `
@@ -473,12 +478,12 @@ const EMAILLISTS = (() => {
     const groupedRegs = {};
     regs.forEach((x) => { const k = listKind(x.f); (groupedRegs[k] = groupedRegs[k] || []).push(x); });
     const rowFor = (x) => { const f = x.f;
-      const type = (String(f.RegistrationId || "").startsWith("manual-")) ? "custom" : (f.Category || f.Sport || "");
+      const type = effectiveType(f);
       // "filter address…" searches the Title, but the visible Type column shows "custom"/a
       // sport name that isn't part of the Title -- fold it (+ the section label) into the
       // searchable text so typing e.g. "custom" actually matches the rows that display it.
       const searchText = [f.Title, type, LIST_KIND_LABEL[listKind(f)]].filter(Boolean).join(" ").toLowerCase();
-      return `<tr data-reg="${esc(f.RegistrationId)}" data-mail="${esc(f.Title)}" data-itemid="${esc(x.id)}" data-expires="${esc((f.ExpiresOn || "").slice(0, 10))}" data-catgroup="${listKind(f)}" data-cat="${esc(f.Category || "")}" data-gender="${esc(f.Gender || "")}" data-age="${esc(f.AgeGroup || "")}" data-text="${esc(searchText)}" style="cursor:pointer"><td>${esc(f.Title)}</td><td>${esc(type)}</td><td>${esc(divisionOf(f))}</td><td>${esc(f.RecipientCount)}</td><td>${esc((f.ExpiresOn || "").slice(0, 10) || "—")}</td></tr>`;
+      return `<tr data-reg="${esc(f.RegistrationId)}" data-mail="${esc(f.Title)}" data-itemid="${esc(x.id)}" data-expires="${esc((f.ExpiresOn || "").slice(0, 10))}" data-catgroup="${listKind(f)}" data-cat="${esc(type)}" data-gender="${esc(f.Gender || "")}" data-age="${esc(f.AgeGroup || "")}" data-text="${esc(searchText)}" style="cursor:pointer"><td>${esc(f.Title)}</td><td>${esc(type)}</td><td>${esc(divisionOf(f))}</td><td>${esc(f.RecipientCount)}</td><td>${esc((f.ExpiresOn || "").slice(0, 10) || "—")}</td></tr>`;
     };
     const tableBody = LIST_KINDS.filter((k) => groupedRegs[k] && groupedRegs[k].length).map((k) => {
       const items = groupedRegs[k].slice().sort((a, b) => String(a.f.Title).localeCompare(String(b.f.Title)));
@@ -795,7 +800,7 @@ const EMAILLISTS = (() => {
     lists.forEach((x) => { const k = listKind(x.f); (groups[k] = groups[k] || []).push(x); });
     const rowFor = (x, k) => { const f = x.f; const div = divisionOf(f);
       const searchText = [f.Title, LIST_KIND_LABEL[k]].filter(Boolean).join(" ").toLowerCase();
-      return `<label class="cm-row" style="display:block;margin:3px 0" data-cat="${esc(f.Category || "")}" data-gender="${esc(f.Gender || "")}" data-age="${esc(f.AgeGroup || "")}" data-text="${esc(searchText)}" data-group="${k}">
+      return `<label class="cm-row" style="display:block;margin:3px 0" data-cat="${esc(effectiveType(f))}" data-gender="${esc(f.Gender || "")}" data-age="${esc(f.AgeGroup || "")}" data-text="${esc(searchText)}" data-group="${k}">
           <input type="checkbox" class="cm-list" data-mail="${esc(f.Title)}" data-count="${esc(f.RecipientCount || 0)}" data-group="${k}"> ${esc(f.Title)}${div ? ` <span class="muted">· ${esc(div)}</span>` : ""} <span class="muted">· ${esc(f.RecipientCount || 0)} recipients</span>
         </label>`;
     };
