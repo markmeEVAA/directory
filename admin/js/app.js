@@ -213,9 +213,12 @@
   // <body> would tint the whole page).
   document.body.classList.add(`viewmode-${role}`);
 
-  // Email Lists tab: admins + group owners (board leaders). Owners are scoped to
-  // their own sport's lists inside the tab (EMAIL_LISTS_OWNER_ENABLED = true).
-  if (role !== "admin" && role !== "owner") {
+  // Email Lists tab: admins + group owners (board leaders) + fusionadmins. Owners/fusionadmins
+  // are scoped to their own sport's/Fusion's lists inside the tab. Fusionadmins have no direct
+  // SharePoint grant on this site (by design -- see gotcha history), so emaillists.js routes
+  // their reads/writes through the EVAA - Email List Bridge flow instead of calling Graph
+  // directly; admin/owner keep the existing direct-SharePoint path unchanged.
+  if (role !== "admin" && role !== "owner" && role !== "fusionadmin") {
     const elTab = document.querySelector('.tab-btn[data-tab="emaillists"]');
     if (elTab) elTab.style.display = "none";
   }

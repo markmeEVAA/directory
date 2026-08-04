@@ -18,6 +18,47 @@ const EMAILLISTS = (() => {
   // flow id 568e97e4-01f9-494a-ba51-0ae52e6aa210). Empty string = edits apply at the next
   // scheduled sync instead.
   const TRIGGER_URL = "https://defaultb5897a1bb85b42bd8e619b021b67d2.ce.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/31/workflows/cce849360a79496bb4428a570a9d665c/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=puK2G_j5APlXhKdduGDutbgdflc7RWuWtV6WLWUVGsg";
+  // "EVAA - Email List Bridge" flow. Fusion admins (and any future role without a direct
+  // SharePoint grant on EVAABoardPortal) route their EmailListRegistry/EmailListOverrides
+  // reads+writes through here instead of calling Graph/SharePoint directly -- the flow holds
+  // its own SharePoint access and re-derives the caller's authorization server-side from their
+  // passed-through token. Admin/owner keep the direct-SharePoint path below unchanged.
+  const BRIDGE_URL = "https://defaultb5897a1bb85b42bd8e619b021b67d2.ce.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/17/workflows/2bb4865dd4ed40b09eeefa2afc411930/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=RL5CtRdCtTuF7GEYWfNGPupJmKWGr3-0H7hgGJ1BCrQ";
+  let _useBridge = false;
+  let _primaryBoardGroupMail = null;
+  async function _bridge(action, extra = {}) {
+    const token = await AUTH.getToken();
+    const resp = await fetch(BRIDGE_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, callerToken: token, ...extra }),
+    });
+    const t = await resp.text();
+    const body = t ? JSON.parse(t) : null;
+    if (!resp.ok) throw new Error(`Bridge ${resp.status}: ${(body && body.error) || t.slice(0, 200)}`);
+    return body;
+  }
+  // The connector's PostItem/PatchItem/GetItem responses are flat; its GetItems responses nest
+  // each row under .fields with Choice columns as {Value}. Normalize both into the same {id, f}
+  // shape Graph's own /items?$expand=fields returns, so downstream rendering code doesn't care
+  // which path fetched the data.
+  function _normalizeConnectorItem(raw) {
+    const src = raw.fields || raw;
+    const f = {};
+    Object.keys(src).forEach((k) => { const v = src[k]; f[k] = (v && typeof v === "object" && "Value" in v) ? v.Value : v; });
+    return { id: String(raw.id ?? src.ID ?? src.Id ?? ""), f };
+  }
+  async function _ownedFusionBoardGroups() {
+    const me = await GRAPH.getMe();
+    const owned = await GRAPH.getUserOwnedGroups(me.id);
+    return (owned || []).map((g) => g.mail || "").filter((m) => /@avfusion\.org$/i.test(m));
+  }
+  async function _primaryBoardGroup() {
+    if (_primaryBoardGroupMail) return _primaryBoardGroupMail;
+    const groups = await _ownedFusionBoardGroups();
+    _primaryBoardGroupMail = groups.find((m) => /director/i.test(m)) || groups[0] || null;
+    return _primaryBoardGroupMail;
+  }
   // The workflow's own gate applies a 10-minute cooldown per dispatch, so a burst of edits
   // collapses server-side too — this debounce just avoids firing one request per keystroke-ish edit.
   const SYNC_DEBOUNCE_MS = 45 * 1000;
@@ -75,10 +116,27 @@ const EMAILLISTS = (() => {
   }
 
   async function getRegistry() {
+    if (_useBridge) {
+      const groups = await _ownedFusionBoardGroups();
+      const seen = new Map();
+      for (const boardGroupMail of groups) {
+        const rows = await _bridge("get_registry", { boardGroupMail });
+        (rows || []).forEach((r) => { const n = _normalizeConnectorItem(r); seen.set(n.id, n); });
+      }
+      return [...seen.values()].filter((x) => (x.f.Status || "") !== "Deleted");
+    }
     const r = await _g(`/sites/${SITE}/lists/${REGISTRY}/items?$expand=fields&$top=500`);
     return (r.value || []).map((i) => ({ id: i.id, f: i.fields })).filter((x) => (x.f.Status || "") !== "Deleted");
   }
   async function patchRegistry(itemId, fields) {
+    if (_useBridge) {
+      const boardGroupMail = await _primaryBoardGroup();
+      const extra = { itemId: String(itemId), boardGroupMail };
+      if ("ExpiresOn" in fields) extra.expiresOn = fields.ExpiresOn;
+      if ("Status" in fields) extra.status = fields.Status;
+      await _bridge("patch_registry", extra);
+      return;
+    }
     await _g(`/sites/${SITE}/lists/${REGISTRY}/items/${itemId}/fields`, { method: "PATCH", body: JSON.stringify(fields) });
   }
   async function getMembers(dlMail) {
@@ -91,10 +149,49 @@ const EMAILLISTS = (() => {
   }
   async function addOverride(reg, action, email, name) {
     const me = await GRAPH.getMe();
-    const fields = { Title: `${action} ${email}`, RegistrationId: String(reg), ActionType: action, Email: email, RecipientName: name || "", Actor: me?.userPrincipalName || me?.mail || "" };
-    await _g(`/sites/${SITE}/lists/${OVERRIDES}/items`, { method: "POST", body: JSON.stringify({ fields }) });
-    GRAPH.logAuditEntry({ actor: fields.Actor, action: action === "Add" ? "emaillist add request" : "emaillist remove request", targetName: email, targetGroup: reg, result: "Success", notes: JSON.stringify({ list: reg, action }) });
+    const actor = me?.userPrincipalName || me?.mail || "";
+    if (_useBridge) {
+      const boardGroupMail = await _primaryBoardGroup();
+      await _bridge("add_override", { boardGroupMail, registrationId: String(reg), actionType: action, email, name: name || "" });
+    } else {
+      const fields = { Title: `${action} ${email}`, RegistrationId: String(reg), ActionType: action, Email: email, RecipientName: name || "", Actor: actor };
+      await _g(`/sites/${SITE}/lists/${OVERRIDES}/items`, { method: "POST", body: JSON.stringify({ fields }) });
+    }
+    GRAPH.logAuditEntry({ actor, action: action === "Add" ? "emaillist add request" : "emaillist remove request", targetName: email, targetGroup: reg, result: "Success", notes: JSON.stringify({ list: reg, action }) });
     triggerSync();
+  }
+  // rows: [{email, name}]. Bridge-routed callers get one flow call (its own Apply-to-each loop);
+  // direct-SharePoint callers post one override per row -- same end state either way.
+  async function bulkAddOverrides(reg, rows) {
+    const me = await GRAPH.getMe();
+    const actor = me?.userPrincipalName || me?.mail || "";
+    if (_useBridge) {
+      const boardGroupMail = await _primaryBoardGroup();
+      await _bridge("bulk_add_overrides", { boardGroupMail, registrationId: String(reg), recipients: rows });
+    } else {
+      for (const r of rows) {
+        const fields = { Title: `Add ${r.email}`, RegistrationId: String(reg), ActionType: "Add", Email: r.email, RecipientName: r.name || "", Actor: actor };
+        await _g(`/sites/${SITE}/lists/${OVERRIDES}/items`, { method: "POST", body: JSON.stringify({ fields }) });
+      }
+    }
+    GRAPH.logAuditEntry({ actor, action: "emaillist bulk import", targetGroup: reg, result: "Success", notes: JSON.stringify({ list: reg, count: rows.length }) });
+    triggerSync();
+  }
+  // Accepts "email" or "email,name" per line (basic quoted-field support for names with commas).
+  // A header row starting with "email" is skipped. Returns {rows, errors} -- errors are 1-indexed
+  // line numbers that didn't parse as a valid email, so the UI can flag what got skipped.
+  function parseCsvRecipients(text) {
+    const lines = String(text || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const rows = [], errors = [];
+    lines.forEach((line, i) => {
+      const cells = (line.match(/(?:"[^"]*"|[^,])+/g) || []).map((c) => c.trim().replace(/^"|"$/g, ""));
+      const email = (cells[0] || "").trim();
+      const name = (cells[1] || "").trim();
+      if (i === 0 && /^email$/i.test(email)) return;
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errors.push({ line: i + 1, text: line }); return; }
+      rows.push({ email: email.toLowerCase(), name });
+    });
+    return { rows, errors };
   }
 
   function root() { return document.getElementById("emaillists-view"); }
@@ -149,6 +246,14 @@ const EMAILLISTS = (() => {
   const coachesAddress = (sport) => slug(sport) + "-coaches@evaasports.org";
 
   async function createListRow(fields) {
+    if (_useBridge) {
+      // Bridge's create_registry case always writes Sport "(custom)"/Source "Manual"/Status
+      // "Active" -- fine for custom lists (createCustomList, below) but not for SE-sourced rows
+      // (openSeCreate). Fusion isn't SportsEngine-integrated so that path is unreachable in
+      // practice for bridge-routed users.
+      await _bridge("create_registry", { boardGroupMail: fields.BoardGroup, title: fields.Title, registrationId: fields.RegistrationId });
+      return;
+    }
     await _g(`/sites/${SITE}/lists/${REGISTRY}/items`, { method: "POST", body: JSON.stringify({ fields }) });
   }
 
@@ -254,15 +359,17 @@ const EMAILLISTS = (() => {
   async function load() {
     root().innerHTML = `<div class="card"><p class="loading">Loading email lists…</p></div>`;
     try {
-      let regs = await getRegistry();
       const isAdmin = await GRAPH.isPortalAdmin();
-      if (!isAdmin) {
+      _useBridge = !isAdmin && (await GRAPH.isFusionAdmin());
+      let regs = await getRegistry();
+      if (!isAdmin && !_useBridge) {
         // board leader (owner): show only lists for groups they own
         const me = await GRAPH.getMe();
         const owned = await GRAPH.getUserOwnedGroups(me.id);
         const ownedMails = new Set(owned.map((g) => (g.mail || "").toLowerCase()).filter(Boolean));
         regs = regs.filter((x) => ownedMails.has((x.f.BoardGroup || "").toLowerCase()));
       }
+      // (fusionadmin: getRegistry() above already scoped the rows server-side per owned Fusion group)
       _lastRegs = regs;
       renderList(regs, isAdmin);
     }
@@ -286,8 +393,7 @@ const EMAILLISTS = (() => {
     if (!a) throw new Error("Enter a valid list name.");
     if (!boardMail) throw new Error("Pick who's allowed to send to it.");
     const smtp = a + "@evaasports.org";
-    const fields = { Title: smtp, RegistrationId: "manual-" + a, Sport: "(custom)", BoardGroup: boardMail, Source: "Manual", Status: "Active", RecipientCount: 0 };
-    await _g(`/sites/${SITE}/lists/${REGISTRY}/items`, { method: "POST", body: JSON.stringify({ fields }) });
+    await createListRow({ Title: smtp, RegistrationId: "manual-" + a, Sport: "(custom)", BoardGroup: boardMail, Source: "Manual", Status: "Active", RecipientCount: 0 });
     return smtp;
   }
 
@@ -336,7 +442,7 @@ const EMAILLISTS = (() => {
         <h2>Email Lists</h2>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn-secondary" id="el-send-btn">✉ Send to lists</button>
-          <button class="btn-secondary" id="el-se-btn">+ Create from SportsEngine</button>
+          ${_useBridge ? "" : '<button class="btn-secondary" id="el-se-btn">+ Create from SportsEngine</button>'}
           <button class="btn-secondary" id="el-create-btn">+ Create custom list</button>
           ${isAdmin ? '<button class="btn-secondary" id="el-sync-btn" title="Force a sync now instead of waiting for the next scheduled/change-triggered run">↻ Sync now</button>' : ""}
         </div>
@@ -384,7 +490,8 @@ const EMAILLISTS = (() => {
     });
 
     document.getElementById("el-send-btn").addEventListener("click", openCompose);
-    document.getElementById("el-se-btn").addEventListener("click", openSeCreate);
+    const seBtn = document.getElementById("el-se-btn");
+    if (seBtn) seBtn.addEventListener("click", openSeCreate);
     const syncBtn = document.getElementById("el-sync-btn");
     if (syncBtn) {
       applySyncButtonState(syncBtn);
@@ -439,6 +546,17 @@ const EMAILLISTS = (() => {
         <input type="email" id="el-add-email" placeholder="add an email…" style="min-width:240px" />
         <input type="text" id="el-add-name" placeholder="name (optional)" />
         <button class="btn-secondary" id="el-add-btn">+ Add</button>
+        <button class="btn-secondary" id="el-bulk-btn">⇪ Bulk import</button>
+      </div>
+      <div id="el-bulk-form" class="hidden" style="margin:0 0 10px;padding:12px;background:#f4f6f9;border-radius:8px">
+        <p class="muted" style="margin:0 0 8px">Paste rows as <code>email</code> or <code>email,name</code> (one per line), or choose a CSV file. A header row starting with "email" is skipped automatically.</p>
+        <input type="file" id="el-bulk-file" accept=".csv,text/csv" style="margin-bottom:8px" />
+        <textarea id="el-bulk-text" rows="6" style="width:100%;font-family:monospace;font-size:13px;box-sizing:border-box" placeholder="jane@example.com,Jane Smith&#10;john@example.com"></textarea>
+        <div id="el-bulk-preview" class="muted" style="margin:8px 0"></div>
+        <div class="toolbar" style="gap:8px">
+          <button class="btn-primary" id="el-bulk-import-btn" disabled>Import</button>
+          <button class="btn-link" id="el-bulk-cancel">Cancel</button>
+        </div>
       </div>
       <input type="search" id="el-filter" placeholder="filter recipients…" style="margin:10px 0;width:100%;padding:6px" />
       <table class="data-table"><thead><tr><th>Email</th><th>Name</th><th class="col-actions"></th></tr></thead>
@@ -461,6 +579,59 @@ const EMAILLISTS = (() => {
         document.getElementById("el-add-email").value = ""; document.getElementById("el-add-name").value = "";
       }
       catch (e) { alert("Failed to queue add: " + e.message); }
+    });
+
+    // --- bulk import (paste or CSV file) ---
+    const bulkForm = document.getElementById("el-bulk-form");
+    const bulkText = document.getElementById("el-bulk-text");
+    const bulkFile = document.getElementById("el-bulk-file");
+    const bulkPreview = document.getElementById("el-bulk-preview");
+    const bulkImportBtn = document.getElementById("el-bulk-import-btn");
+    let bulkRows = [];
+    const resetBulkForm = () => { bulkText.value = ""; bulkFile.value = ""; bulkPreview.innerHTML = ""; bulkRows = []; bulkImportBtn.disabled = true; };
+    const updateBulkPreview = () => {
+      const { rows, errors } = parseCsvRecipients(bulkText.value);
+      bulkRows = rows;
+      const existing = new Set(members.map((m) => (m.mail || "").toLowerCase()));
+      const dupes = rows.filter((r) => existing.has(r.email)).length;
+      bulkPreview.innerHTML = rows.length
+        ? `${rows.length} recipient${rows.length === 1 ? "" : "s"} ready` + (dupes ? ` <span class="muted">(${dupes} already on this list — will just be re-confirmed)</span>` : "")
+          + (errors.length ? `<br><span style="color:#b00020">${errors.length} line(s) skipped (not a valid email): ${errors.slice(0, 5).map((e) => esc(e.text)).join(", ")}${errors.length > 5 ? "…" : ""}</span>` : "")
+        : (bulkText.value.trim() ? `<span style="color:#b00020">No valid email rows found.</span>` : "");
+      bulkImportBtn.disabled = !rows.length;
+    };
+    document.getElementById("el-bulk-btn").addEventListener("click", () => bulkForm.classList.toggle("hidden"));
+    document.getElementById("el-bulk-cancel").addEventListener("click", () => { bulkForm.classList.add("hidden"); resetBulkForm(); });
+    bulkText.addEventListener("input", updateBulkPreview);
+    bulkFile.addEventListener("change", () => {
+      const f = bulkFile.files[0]; if (!f) return;
+      const reader = new FileReader();
+      reader.onload = () => { bulkText.value = String(reader.result || ""); updateBulkPreview(); };
+      reader.readAsText(f);
+    });
+    bulkImportBtn.addEventListener("click", async () => {
+      if (!bulkRows.length) return;
+      const ok = await confirmModal({
+        title: `Import ${bulkRows.length} recipient${bulkRows.length === 1 ? "" : "s"}?`,
+        okLabel: "Import",
+        body: `<p>These will be added and applied at the next sync:</p>
+               <ul style="max-height:220px;overflow:auto">${bulkRows.slice(0, 50).map((r) => `<li>${esc(r.email)}${r.name ? ` — ${esc(r.name)}` : ""}</li>`).join("")}${bulkRows.length > 50 ? `<li class="muted">…and ${bulkRows.length - 50} more</li>` : ""}</ul>`,
+      });
+      if (!ok) return;
+      bulkImportBtn.disabled = true; bulkImportBtn.textContent = "Importing…";
+      try {
+        await bulkAddOverrides(reg, bulkRows);
+        const tb = document.getElementById("el-tbody");
+        bulkRows.forEach((r) => {
+          const tr = document.createElement("tr");
+          tr.style.background = "#fffbe6";
+          tr.innerHTML = `<td>${esc(r.email)}</td><td>${esc(r.name)} <span class="muted">(pending — applies at next sync)</span></td><td></td>`;
+          tb.prepend(tr);
+        });
+        toast(`Imported ${bulkRows.length} recipient${bulkRows.length === 1 ? "" : "s"} — applies at the next sync.`);
+        bulkForm.classList.add("hidden"); resetBulkForm();
+      } catch (e) { alert("Bulk import failed: " + e.message); }
+      finally { bulkImportBtn.disabled = false; bulkImportBtn.textContent = "Import"; }
     });
 
     document.getElementById("el-tbody").addEventListener("click", async (ev) => {
