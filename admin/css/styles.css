@@ -1035,6 +1035,24 @@ td a:hover { text-decoration: underline; }
 /* Hidden by default — only the matching role-banner class shows */
 .role-banner { display: none; }
 
+body.previewing-as .role-banner-viewas {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #f1e9fb;
+  border-left: 4px solid #6b3fa0;
+  padding: 10px 16px;
+  margin: 0 0 12px;
+  font-size: 0.9em;
+  color: #3d2360;
+  border-radius: 0 4px 4px 0;
+}
+.role-banner-viewas .btn-link {
+  color: #6b3fa0;
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
 body.viewmode-owner .role-banner-owner {
   display: block;
   background: #FFF7E0;

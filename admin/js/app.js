@@ -132,9 +132,37 @@
   // Stay on loading view while we check admin + fetch groups
   $("loading-text").textContent = "Checking access…";
 
+  // "View as" preview — checked with the REAL signed-in identity, before any
+  // stored preview target is applied. Only a real admin can enter or stay in
+  // a preview; a non-admin's leftover storage entry (e.g. after a role change)
+  // is ignored and cleared rather than trusted.
+  let realIsAdmin = false;
+  try {
+    realIsAdmin = await GRAPH.isPortalAdmin();
+  } catch (err) {
+    showError("Admin check failed: " + err.message);
+    show("signin");
+    return;
+  }
+
+  let viewAsTarget = null;
+  const viewAsStored = sessionStorage.getItem("evaa-view-as");
+  if (viewAsStored) {
+    if (realIsAdmin) {
+      try { viewAsTarget = JSON.parse(viewAsStored); } catch { viewAsTarget = null; }
+    }
+    if (!viewAsTarget) sessionStorage.removeItem("evaa-view-as");
+  }
+  if (viewAsTarget) GRAPH.setViewAsUser(viewAsTarget.id);
+
+  // isAdmin reflects the PREVIEWED person once a preview is active — everything
+  // below this point (role detection, tab visibility, group list) is naturally
+  // preview-aware because it all reads through GRAPH functions that now resolve
+  // "me" to the preview target. Re-check only when actually previewing, to avoid
+  // an extra Graph round-trip on the common (not previewing) path.
   let isAdmin;
   try {
-    isAdmin = await GRAPH.isPortalAdmin();
+    isAdmin = viewAsTarget ? await GRAPH.isPortalAdmin() : realIsAdmin;
   } catch (err) {
     showError("Admin check failed: " + err.message);
     show("signin");
@@ -236,6 +264,54 @@
     ["members", "reset", "audit"].forEach((t) => {
       const btn = document.querySelector(`.tab-btn[data-tab="${t}"]`);
       if (btn) btn.style.display = "none";
+    });
+  }
+
+  // =====================================================================
+  // VIEW AS — real-admin-only preview of the portal as another person.
+  // Everything above this point already reflects the preview target (every
+  // GRAPH "who am I" call resolves through meOrViewAs()); this block only
+  // wires the entry point (real admins), the exit path, and the picker.
+  // =====================================================================
+  if (realIsAdmin) {
+    $("view-as-btn").classList.remove("hidden");
+    $("view-as-btn").addEventListener("click", () => {
+      $("view-as-search-input").value = "";
+      $("view-as-search-results").innerHTML = "";
+      $("view-as-panel").classList.remove("hidden");
+      $("view-as-search-input").focus();
+    });
+    $("view-as-panel-close").addEventListener("click", () => $("view-as-panel").classList.add("hidden"));
+
+    let vaDebounce;
+    $("view-as-search-input").addEventListener("input", (e) => {
+      const q = e.target.value.trim();
+      clearTimeout(vaDebounce);
+      if (q.length < 2) { $("view-as-search-results").innerHTML = ""; return; }
+      vaDebounce = setTimeout(async () => {
+        try {
+          const users = await GRAPH.searchUsers(q);
+          const container = $("view-as-search-results");
+          if (!users.length) { container.innerHTML = `<p class="muted">No matching users.</p>`; return; }
+          container.innerHTML = users.map((u) => `<button type="button" class="user-result" data-user-id="${escapeHtml(u.id)}" data-name="${escapeHtml(u.displayName)}">
+            <span class="user-name">${escapeHtml(u.displayName)}</span>
+            <span class="user-mail muted">${escapeHtml(u.mail || u.userPrincipalName || "")}</span>
+          </button>`).join("");
+          container.querySelectorAll(".user-result").forEach((btn) => btn.addEventListener("click", () => {
+            sessionStorage.setItem("evaa-view-as", JSON.stringify({ id: btn.dataset.userId, displayName: btn.dataset.name }));
+            window.location.reload();
+          }));
+        } catch (err) { showError("Search failed: " + err.message); }
+      }, 250);
+    });
+  }
+
+  if (viewAsTarget) {
+    document.body.classList.add("previewing-as");
+    $("view-as-name").textContent = viewAsTarget.displayName;
+    $("view-as-exit-btn").addEventListener("click", () => {
+      sessionStorage.removeItem("evaa-view-as");
+      window.location.reload();
     });
   }
 

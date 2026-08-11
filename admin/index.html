@@ -17,7 +17,8 @@
         <button id="help-btn" class="btn-link header-link" aria-label="Help">Need help?</button>
         <div id="user-area" class="hidden">
           <span id="user-name"></span>
-          <button id="sign-out-btn" class="btn-link">Sign out</button>
+          <button id="view-as-btn" class="btn-link header-link hidden">View as…</button>
+          <button id="sign-out-btn" class="btn-link header-link">Sign out</button>
         </div>
       </div>
     </div>
@@ -36,6 +37,14 @@
   </nav>
 
   <main>
+    <!-- Previewing-as banner. Independent of role — can show alongside the
+         owner/fusionadmin banners below (previewing as an owner shows both). -->
+    <div class="role-banner role-banner-viewas">
+      <span><strong>Previewing as <span id="view-as-name"></span>.</strong>
+      You're signed in as yourself — this only changes what you see, not what you can do.</span>
+      <button id="view-as-exit-btn" class="btn-link">Exit preview</button>
+    </div>
+
     <!-- Banner shown only when signed in as a non-admin group owner.
          CSS hides this by default; body.role-owner reveals it. -->
     <div class="role-banner role-banner-owner">
@@ -377,6 +386,19 @@
 
 
     <!-- Add Director / Add Member (group → user picker) -->
+    <!-- View as: admin-only, pick anyone to preview the portal as. -->
+    <div id="view-as-panel" class="modal-overlay hidden">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>View as…</h3>
+          <button id="view-as-panel-close" class="modal-close" aria-label="Close">×</button>
+        </div>
+        <p class="muted" style="margin-top:0;">Preview the portal as this person would see it — their tabs, their groups, their role. You stay signed in as yourself; nothing you do while previewing is attributed to them.</p>
+        <input type="search" id="view-as-search-input" placeholder="Search by name or email (min 2 chars)…" />
+        <div id="view-as-search-results" class="search-results"></div>
+      </div>
+    </div>
+
     <div id="add-panel" class="modal-overlay hidden">
       <div class="modal-card">
         <div class="modal-header">

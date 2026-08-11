@@ -15,6 +15,18 @@ const GRAPH = (() => {
   // No EVAA SharePoint, no EVAA family-email data. Membership is hand-curated in Entra.
   const FUSION_ADMIN_GROUP_ID = "bf11b914-4eb2-4cf4-8ae2-4fed8b7b2d6d"; // Fusion Portal Admins
 
+  // "View as" preview: an admin previews the portal as if signed in as someone else.
+  // Every read that would normally resolve "who am I" (role checks, owned groups) goes
+  // through meOrViewAs() so setting this one value makes app.js's existing role-detection
+  // logic — and any tab module's independent checks (e.g. emaillists.js) — automatically
+  // reflect the target user, with NO other code needing to know view-as exists.
+  // Deliberately does NOT affect sendMail or anything that writes/acts — those must always
+  // run as the real signed-in admin, never the previewed person. See setViewAsUser below.
+  let _viewAsUserId = null;
+  function setViewAsUser(userId) { _viewAsUserId = userId || null; }
+  function getViewAsUser() { return _viewAsUserId; }
+  function meOrViewAs() { return _viewAsUserId ? `/users/${_viewAsUserId}` : "/me"; }
+
   async function callGraph(path, options = {}) {
     const token = await AUTH.getToken();
     const url = path.startsWith("http") ? path : `${BASE}${path}`;
@@ -53,14 +65,14 @@ const GRAPH = (() => {
   }
 
   async function getMe() {
-    return callGraph("/me?$select=id,displayName,mail,userPrincipalName,jobTitle");
+    return callGraph(`${meOrViewAs()}?$select=id,displayName,mail,userPrincipalName,jobTitle`);
   }
 
-  // True if the current user is a member of any admin-granting group
+  // True if the current (or previewed) user is a member of any admin-granting group
   // (EVAA Portal Admins OR EVAA - Leadership).
   async function isPortalAdmin() {
     try {
-      const result = await callGraph("/me/checkMemberGroups", {
+      const result = await callGraph(`${meOrViewAs()}/checkMemberGroups`, {
         method: "POST",
         body: JSON.stringify({ groupIds: ADMIN_GROUP_IDS }),
       });
@@ -71,10 +83,10 @@ const GRAPH = (() => {
     }
   }
 
-  // True if the current user is a Fusion Portal Admin (scoped admin for Fusion groups).
+  // True if the current (or previewed) user is a Fusion Portal Admin (scoped admin for Fusion groups).
   async function isFusionAdmin() {
     try {
-      const result = await callGraph("/me/checkMemberGroups", {
+      const result = await callGraph(`${meOrViewAs()}/checkMemberGroups`, {
         method: "POST",
         body: JSON.stringify({ groupIds: [FUSION_ADMIN_GROUP_ID] }),
       });
@@ -406,13 +418,13 @@ const GRAPH = (() => {
     });
   }
 
-  // Return the subset of managed group IDs that the current user OWNS.
-  // Uses /me/ownedObjects, filters to the managed-group IDs we already loaded.
+  // Return the subset of managed group IDs that the current (or previewed) user OWNS.
+  // Uses .../ownedObjects, filters to the managed-group IDs we already loaded.
   // Empty array means "not an owner of anything managed".
   async function getOwnedManagedGroupIds(managedGroupIds) {
     if (!managedGroupIds || managedGroupIds.length === 0) return [];
     const owned = await callGraphAll(
-      `/me/ownedObjects/microsoft.graph.group?$select=id&$top=200`
+      `${meOrViewAs()}/ownedObjects/microsoft.graph.group?$select=id&$top=200`
     );
     const ownedSet = new Set(owned.map((g) => g.id));
     return managedGroupIds.filter((id) => ownedSet.has(id));
@@ -589,6 +601,8 @@ const GRAPH = (() => {
 
   return {
     getMe,
+    setViewAsUser,
+    getViewAsUser,
     isPortalAdmin,
     isFusionAdmin,
     getOwnedManagedGroupIds,
