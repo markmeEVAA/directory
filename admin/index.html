@@ -526,6 +526,14 @@
             <input type="checkbox" id="cu-as-owner" />
             Also make them an owner/director of this group
           </label>
+          <div id="cu-onbehalf-section" class="hidden">
+            <label>
+              <span>Submitting on behalf of a director? <span class="hint">(optional — they'll get the request-received / approved / completed emails, and it'll go through the normal approval log instead of provisioning instantly)</span></span>
+              <input type="search" id="cu-onbehalf-search" placeholder="Search by name or email…" autocomplete="off" />
+            </label>
+            <div id="cu-onbehalf-results" class="search-results"></div>
+            <div id="cu-onbehalf-selected" class="hidden"></div>
+          </div>
           <div class="modal-actions">
             <button type="button" id="create-user-cancel" class="btn-link">Cancel</button>
             <button type="submit" id="create-user-submit" class="btn-primary">Create user</button>

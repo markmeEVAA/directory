@@ -378,6 +378,48 @@
     return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   }
 
+  // Single-select directory picker: type to search (GRAPH.searchUsers), click a result
+  // to select, × to clear. Unlike makeUserPicker (multi-select, chips), only ever holds
+  // one person — used for "submit this request on behalf of" fields. Buttons are
+  // type="button" since every current call site lives inside a <form>.
+  function makeSinglePicker(searchId, resultsId, selectedId) {
+    let selected = null;
+    let debounce;
+    function render() {
+      const el = $(selectedId);
+      if (!selected) { el.classList.add("hidden"); el.innerHTML = ""; return; }
+      el.classList.remove("hidden");
+      el.innerHTML = `<span class="user-chip">${escapeHtml(selected.displayName)}${selected.mail ? ` (${escapeHtml(selected.mail)})` : ""} <button type="button" data-clear aria-label="Clear selection">×</button></span>`;
+      el.querySelector("[data-clear]").addEventListener("click", () => { selected = null; $(searchId).value = ""; render(); });
+    }
+    $(searchId).addEventListener("input", (e) => {
+      const q = e.target.value.trim();
+      clearTimeout(debounce);
+      if (q.length < 2) { $(resultsId).innerHTML = ""; return; }
+      debounce = setTimeout(async () => {
+        try {
+          const users = await GRAPH.searchUsers(q);
+          const container = $(resultsId);
+          if (!users.length) { container.innerHTML = `<p class="muted">No matching users.</p>`; return; }
+          container.innerHTML = users.map((u) => `<button type="button" class="user-result" data-user-id="${escapeHtml(u.id)}" data-name="${escapeHtml(u.displayName)}" data-mail="${escapeHtml(u.mail || u.userPrincipalName || "")}">
+            <span class="user-name">${escapeHtml(u.displayName)}</span>
+            <span class="user-mail muted">${escapeHtml(u.mail || u.userPrincipalName || "")}</span>
+          </button>`).join("");
+          container.querySelectorAll(".user-result").forEach((btn) => btn.addEventListener("click", () => {
+            selected = { id: btn.dataset.userId, displayName: btn.dataset.name, mail: btn.dataset.mail };
+            $(searchId).value = "";
+            container.innerHTML = "";
+            render();
+          }));
+        } catch (err) { showError("Search failed: " + err.message); }
+      }, 250);
+    });
+    return {
+      get: () => selected,
+      reset: () => { selected = null; $(searchId).value = ""; $(resultsId).innerHTML = ""; render(); },
+    };
+  }
+
   // Wire filter + sort
   $("group-filter").addEventListener("input", (e) => {
     state.filterText = e.target.value;
@@ -961,7 +1003,7 @@
     } catch (e) { /* non-fatal — picker just won't have options */ }
 
     const groupsLine = `Remove from ${totalGroups} managed group${totalGroups === 1 ? "" : "s"}`;
-    const ok = await confirmCustom({
+    const confirmPromise = confirmCustom({
       body: `<p>What should happen to <strong>${escapeHtml(userName)}</strong>?</p>
         <select id="offboard-action" style="width:100%; padding:6px 8px; font-size:14px;"
                 onchange="var v=this.value;document.getElementById('cq-off').style.display=v==='offboard'?'block':'none';document.getElementById('cq-xfer').style.display=v==='transfer'?'block':'none';document.getElementById('cq-dis').style.display=v==='disable'?'block':'none';document.getElementById('xfer-wrap').style.display=v==='transfer'?'block':'none';">
@@ -1002,11 +1044,22 @@
             <li><strong>Keep the EVAA license</strong> — mailbox + OneDrive stay fully intact</li>
           </ul>
           <p class="muted">Reversible any time via Re-enable. Nothing is scheduled for deletion.</p>
+        </div>
+        <div id="cq-xfer-onbehalf" style="margin-top:12px;">
+          <label for="offboard-onbehalf-search" style="font-weight:600; display:block; margin-bottom:6px;">Submitting on behalf of a director? <span class="hint" style="font-weight:400;">(optional, only used if you pick "transfer" above — they'll get the request-received/approved/completed emails)</span></label>
+          <input type="search" id="offboard-onbehalf-search" placeholder="Search by name or email…" autocomplete="off" style="width:100%; padding:6px 8px; font-size:14px;" />
+          <div id="offboard-onbehalf-results" class="search-results"></div>
+          <div id="offboard-onbehalf-selected" class="hidden"></div>
         </div>`,
       okLabel: "Apply",
       okClass: "btn-danger",
     });
+    // confirmCustom's Promise executor runs synchronously, so #confirm-modal-body is
+    // already populated here — safe to wire the live search picker before awaiting.
+    const offboardOnBehalfPicker = makeSinglePicker("offboard-onbehalf-search", "offboard-onbehalf-results", "offboard-onbehalf-selected");
+    const ok = await confirmPromise;
     if (!ok) return;
+    const onBehalf = offboardOnBehalfPicker.get();
     const action = $("offboard-action")?.value || "offboard";
 
     // TRANSFER → route through the approval flow (secure, async): on approval the mailbox
@@ -1029,6 +1082,8 @@
           memberEmail: currentDetailUser?.mail || currentDetailUser?.userPrincipalName || "",
           removalDisposition: "Transfer mailbox to another person",
           transferTo,
+          onBehalfOfEmail: onBehalf?.mail || "",
+          onBehalfOfName: onBehalf?.displayName || "",
         });
         logAction("submitted offboard+transfer request", userName, userId, { transferTo, sport });
         showToast(`Offboard + handoff of ${userName} to ${transferTo} submitted for admin approval.`);
@@ -2042,6 +2097,11 @@
   // Source-context: which group should the new user be added to by default?
   let createUserContextGroupId = null;
 
+  // Admin-only "submit on behalf of a director" picker for the Create User form.
+  // Owners never see it — they ARE the requester already (routed via createMemberRequest
+  // below regardless). Only relevant for admin mode, which otherwise provisions instantly.
+  const cuOnBehalfPicker = makeSinglePicker("cu-onbehalf-search", "cu-onbehalf-results", "cu-onbehalf-selected");
+
   function openCreateUserPanel(presetGroupId) {
     createUserContextGroupId = presetGroupId || null;
     // Reset form
@@ -2052,6 +2112,8 @@
     $("cu-role-other-wrap").classList.add("hidden");
     upnDirty = false;
     jobTitleDirty = false;
+    cuOnBehalfPicker.reset();
+    $("cu-onbehalf-section").classList.toggle("hidden", role !== "admin");
     // Populate group dropdown
     const sel = $("cu-group");
     sel.innerHTML = state.groups
@@ -2182,6 +2244,36 @@
         closeCreateUserPanel();
         showToast(`Add request submitted — an admin will approve and provision the account.`);
         logAction("submitted Add request", `${first} ${last}`, null, { group: groupName, role: roleVal });
+      } catch (err) {
+        showError(`Could not submit Add request: ${err.message}`);
+      }
+      return;
+    }
+
+    // ADMIN MODE, ON BEHALF OF SOMEONE: same request-log/approval path owners use,
+    // instead of the instant provisioning below — the picked director gets the
+    // received/approved/completed emails via RequestedBy (see createMemberRequest).
+    // Leaving the picker empty keeps today's exact instant-provisioning behavior.
+    const onBehalf = cuOnBehalfPicker.get();
+    if (onBehalf) {
+      const roleSelect = $("cu-role").value;
+      const roleOther = $("cu-role-other").value.trim();
+      const roleVal = roleSelect === "Other" ? roleOther : roleSelect;
+      try {
+        await GRAPH.createMemberRequest({
+          requestType: "Add",
+          sportDisplayName: groupName,
+          firstName: first,
+          lastName: last,
+          personalEmail,
+          emailDomain: "@" + domain,
+          role: roleVal,
+          onBehalfOfEmail: onBehalf.mail || "",
+          onBehalfOfName: onBehalf.displayName || "",
+        });
+        closeCreateUserPanel();
+        showToast(`Add request filed on behalf of ${onBehalf.displayName} — an admin will approve it, then ${onBehalf.displayName} gets notified.`);
+        logAction("submitted Add request on behalf of", `${first} ${last}`, null, { group: groupName, role: roleVal, onBehalfOf: onBehalf.mail });
       } catch (err) {
         showError(`Could not submit Add request: ${err.message}`);
       }

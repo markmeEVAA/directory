@@ -467,6 +467,12 @@ const GRAPH = (() => {
       requesterName: me?.displayName || "",
       removalDisposition: payload.removalDisposition || "",
       transferTo: payload.transferTo || "",
+      // Admin-only: file this request as normal (requesterEmail stays the admin, for
+      // audit) but have Submit-Member-Request resolve RequestedBy to THIS person instead
+      // — the approval flow already emails RequestedBy first, so no flow change needed
+      // beyond that resolution. Empty string when not on-behalf-of (the common case).
+      onBehalfOfEmail: payload.onBehalfOfEmail || "",
+      onBehalfOfName: payload.onBehalfOfName || "",
     };
     const resp = await fetch(SUBMIT_MEMBER_REQUEST_URL, {
       method: "POST",
