@@ -137,6 +137,10 @@ const GRAPH = (() => {
     const out = [];
     for (const g of [...fusionNamed, ...evaaFusion]) {
       if (g.id === FUSION_ADMIN_GROUP_ID) continue; // never expose the admin gate group
+      // Distribution lists (the custom family email lists, e.g. fusion-6u-families@) are
+      // managed in the Email Lists tab — skip them here so each list shows in ONE place:
+      // M365 groups in Manage Groups, custom email lists in Email Lists.
+      if (!(g.groupTypes || []).includes("Unified") && g.mailEnabled) continue;
       if (seen.has(g.id)) continue;
       seen.add(g.id);
       out.push(g);
