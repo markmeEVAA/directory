@@ -190,6 +190,23 @@ const EMAILLISTS = (() => {
     GRAPH.logAuditEntry({ actor, action: "emaillist bulk import", targetGroup: reg, result: "Success", notes: JSON.stringify({ list: reg, count: rows.length }) });
     triggerSync();
   }
+  // Remove many recipients at once. Writes one "Exclude" override per email (bridge-routed or
+  // direct SharePoint) + one audit entry. Their removals are remembered so the sync won't re-add.
+  async function bulkRemoveOverrides(reg, emails) {
+    const me = await GRAPH.getMe();
+    const actor = me?.userPrincipalName || me?.mail || "";
+    const boardGroupMail = _useBridge ? await _primaryBoardGroup() : null;
+    for (const email of emails) {
+      if (_useBridge) {
+        await _bridge("add_override", { boardGroupMail, registrationId: String(reg), actionType: "Exclude", email, name: "" });
+      } else {
+        const fields = { Title: `Exclude ${email}`, RegistrationId: String(reg), ActionType: "Exclude", Email: email, RecipientName: "", Actor: actor };
+        await _g(`/sites/${SITE}/lists/${OVERRIDES}/items`, { method: "POST", body: JSON.stringify({ fields }) });
+      }
+    }
+    GRAPH.logAuditEntry({ actor, action: "emaillist bulk remove", targetGroup: reg, result: "Success", notes: JSON.stringify({ list: reg, count: emails.length }) });
+    triggerSync();
+  }
   // Accepts "email" or "email,name" per line (basic quoted-field support for names with commas).
   // A header row starting with "email" is skipped. Returns {rows, errors} -- errors are 1-indexed
   // line numbers that didn't parse as a valid email, so the UI can flag what got skipped.
@@ -590,8 +607,12 @@ const EMAILLISTS = (() => {
         </div>
       </div>
       <input type="search" id="el-filter" placeholder="filter recipients…" style="margin:10px 0;width:100%;padding:6px" />
-      <table class="data-table"><thead><tr><th>Email</th><th>Name</th><th class="col-actions"></th></tr></thead>
-      <tbody id="el-tbody">${displayRows.map((m) => `<tr data-email="${esc(m.mail)}"${groupExists ? "" : ' style="background:#fffbe6"'}><td>${esc(m.mail)}</td><td>${esc(m.displayName || "")}${groupExists ? "" : ' <span class="muted">(queued)</span>'}</td><td><button class="btn-link el-remove" style="color:#b00020">remove</button></td></tr>`).join("")}</tbody></table></div>`;
+      <div class="toolbar hidden" id="el-selbar" style="margin:0 0 8px;align-items:center;gap:10px">
+        <span class="muted"><strong id="el-selcount">0</strong> selected</span>
+        <button class="btn-danger" id="el-remove-selected">Remove selected</button>
+      </div>
+      <table class="data-table"><thead><tr><th style="width:28px"><input type="checkbox" id="el-select-all" title="Select all"></th><th>Email</th><th>Name</th><th class="col-actions"></th></tr></thead>
+      <tbody id="el-tbody">${displayRows.map((m) => `<tr data-email="${esc(m.mail)}"${groupExists ? "" : ' style="background:#fffbe6"'}><td><input type="checkbox" class="el-rowcheck"></td><td>${esc(m.mail)}</td><td>${esc(m.displayName || "")}${groupExists ? "" : ' <span class="muted">(queued)</span>'}</td><td><button class="btn-link el-remove" style="color:#b00020">remove</button></td></tr>`).join("")}</tbody></table></div>`;
     document.getElementById("el-back").addEventListener("click", load);
 
     document.getElementById("el-add-btn").addEventListener("click", async () => {
@@ -665,11 +686,47 @@ const EMAILLISTS = (() => {
       finally { bulkImportBtn.disabled = false; bulkImportBtn.textContent = "Import"; }
     });
 
-    document.getElementById("el-tbody").addEventListener("click", async (ev) => {
+    const tbody = document.getElementById("el-tbody");
+    const selbar = document.getElementById("el-selbar");
+    const selcount = document.getElementById("el-selcount");
+    const selectAll = document.getElementById("el-select-all");
+    const markQueued = (tr) => {
+      tr.style.opacity = 0.4; tr.dataset.removed = "1";
+      const c = tr.querySelector(".el-rowcheck"); if (c) { c.checked = false; c.disabled = true; }
+      const rm = tr.querySelector(".el-remove"); if (rm) { rm.textContent = "queued"; rm.disabled = true; }
+    };
+    const checkedRows = () => [...tbody.querySelectorAll(".el-rowcheck:checked")].map((c) => c.closest("tr")).filter((tr) => tr && !tr.dataset.removed);
+    const updateSelBar = () => { const n = checkedRows().length; selcount.textContent = n; selbar.classList.toggle("hidden", n === 0); };
+
+    tbody.addEventListener("change", (ev) => { if (ev.target.classList.contains("el-rowcheck")) updateSelBar(); });
+    selectAll.addEventListener("change", () => {
+      tbody.querySelectorAll("tr").forEach((tr) => {                       // only the visible (unfiltered) rows
+        if (tr.style.display === "none" || tr.dataset.removed) return;
+        const c = tr.querySelector(".el-rowcheck"); if (c) c.checked = selectAll.checked;
+      });
+      updateSelBar();
+    });
+    document.getElementById("el-remove-selected").addEventListener("click", async () => {
+      const rows = checkedRows();
+      const emails = rows.map((tr) => tr.dataset.email).filter(Boolean);
+      if (!emails.length) return;
+      if (!confirm(`Queue removal of ${emails.length} recipient${emails.length === 1 ? "" : "s"} from this list? They'll be removed at the next sync and stay removed.`)) return;
+      const btn = document.getElementById("el-remove-selected");
+      btn.disabled = true; btn.textContent = "Removing…";
+      try {
+        await bulkRemoveOverrides(reg, emails);
+        rows.forEach(markQueued);
+        selectAll.checked = false; updateSelBar();
+        toast(`Queued removal of ${emails.length} recipient${emails.length === 1 ? "" : "s"} — applies at the next sync.`);
+      } catch (e) { alert("Failed to queue removals: " + e.message); }
+      finally { btn.disabled = false; btn.textContent = "Remove selected"; }
+    });
+
+    tbody.addEventListener("click", async (ev) => {
       const btn = ev.target.closest(".el-remove"); if (!btn) return;
       const tr = btn.closest("tr"); const email = tr.dataset.email;
       if (!confirm(`Queue removal of ${email} from this list? It will be removed at the next sync and stay removed.`)) return;
-      try { await addOverride(reg, "Exclude", email, ""); tr.style.opacity = 0.4; btn.textContent = "queued"; btn.disabled = true; toast(`Queued: remove ${email}`); }
+      try { await addOverride(reg, "Exclude", email, ""); markQueued(tr); updateSelBar(); toast(`Queued: remove ${email}`); }
       catch (e) { alert("Failed to queue removal: " + e.message); }
     });
 
