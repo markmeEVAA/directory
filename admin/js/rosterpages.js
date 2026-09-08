@@ -7,6 +7,9 @@
 // than failing silently forever (see EMAIL-LISTS.md-style history for why this exists —
 // a deleted sub-committee group's stale GUID caused days of unnoticed failures).
 // Self-contained module; reuses AUTH.getToken + GRAPH helpers, same pattern as emaillists.js.
+// Sync architecture (since 2026-09-07): both sync flows are HTTP-triggered; "EVAA - Directory
+// Sync Scheduler" fires them every 4h, and "EVAA - Directory Sync Trigger" (TRIGGER_URL below)
+// fires them on demand from the Sync-now button here.
 
 const ROSTERPAGES = (() => {
   const BASE = "https://graph.microsoft.com/v1.0";
@@ -16,6 +19,15 @@ const ROSTERPAGES = (() => {
   // got created, harmless, just has to be referenced by this internal name in every read/write.
   const H1_FIELD = "_x0048_1";
   const GITHUB_PAGES_BASE = "https://markmeevaa.github.io/directory/";
+
+  // SAS-signed HTTP trigger for the "EVAA - Directory Sync Trigger" Power Automate flow,
+  // which fires both directory sync flows (per-sport pages + all-rosters) on demand.
+  // Same intentionally-shipped-in-client-JS pattern as emaillists.js TRIGGER_URL: the sig
+  // only lets callers request a sync (the flows diff-skip, so a spurious call is a no-op).
+  // Empty string disables the button; edits then apply at the next scheduled 4-hour sync.
+  const TRIGGER_URL = "https://defaultb5897a1bb85b42bd8e619b021b67d2.ce.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/12/workflows/d9aabc1a293943a98575fc3e697ae41f/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=IMlXE7oNvvO8JrQ4T3E10WTmCVRxrZKhRWSqNqwMjHA";
+  const SYNC_COOLDOWN_MS = 10 * 60 * 1000;
+  const SYNC_COOLDOWN_KEY = "evaa-rosterpages-last-admin-sync";
 
   async function _g(path, options = {}) {
     const token = await AUTH.getToken();
@@ -37,6 +49,27 @@ const ROSTERPAGES = (() => {
     setTimeout(() => b.classList.add("hidden"), 4000);
   }
   const slug = (s) => String(s || "").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
+
+  async function fireDispatch(source) {
+    if (!TRIGGER_URL) return;
+    await fetch(TRIGGER_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ source }) });
+  }
+  function syncCooldownRemainingMs() {
+    const last = Number(localStorage.getItem(SYNC_COOLDOWN_KEY) || 0);
+    return Math.max(0, last + SYNC_COOLDOWN_MS - Date.now());
+  }
+  function applySyncButtonState(btn) {
+    if (!btn) return;
+    const remaining = syncCooldownRemainingMs();
+    if (remaining > 0) {
+      btn.disabled = true;
+      btn.textContent = `Synced — next in ${Math.ceil(remaining / 60000)}m`;
+      setTimeout(() => applySyncButtonState(document.getElementById("rp-sync-btn")), Math.min(remaining, 30000));
+    } else {
+      btn.disabled = false;
+      btn.textContent = "↻ Sync now";
+    }
+  }
 
   async function getRows() {
     const r = await _g(`/sites/${SITE}/lists/${LIST}/items?$expand=fields&$top=500`);
@@ -119,7 +152,10 @@ const ROSTERPAGES = (() => {
     root().innerHTML = `<div class="card">
       <div class="section-header" style="align-items:center">
         <h2>Roster Pages</h2>
-        <button class="btn-secondary" id="rp-add-btn">+ Add group</button>
+        <div style="display:flex;gap:8px">
+          ${TRIGGER_URL ? '<button class="btn-secondary" id="rp-sync-btn" title="Rebuild the public roster pages now instead of waiting for the next 4-hour scheduled sync">↻ Sync now</button>' : ""}
+          <button class="btn-secondary" id="rp-add-btn">+ Add group</button>
+        </div>
       </div>
       <p class="muted">Controls which groups get published to the public roster pages (embedded on evaasports.org). Sports rarely change; sub-committees do — remove a group here when it's retired instead of just deleting it from Entra, or the sync flow will catch it automatically and flag it below.</p>
       <div id="rp-add-form" class="hidden" style="margin:0 0 14px;padding:12px;background:#f4f6f9;border-radius:8px"></div>
@@ -133,6 +169,22 @@ const ROSTERPAGES = (() => {
     </div>`;
 
     document.getElementById("rp-add-btn").addEventListener("click", openAddForm);
+    const syncBtn = document.getElementById("rp-sync-btn");
+    if (syncBtn) {
+      applySyncButtonState(syncBtn);
+      syncBtn.addEventListener("click", async () => {
+        syncBtn.disabled = true;
+        syncBtn.textContent = "Syncing…";
+        try {
+          await fireDispatch("admin-button");
+          localStorage.setItem(SYNC_COOLDOWN_KEY, String(Date.now()));
+          toast("Sync requested — the flows run in about a minute, but GitHub Pages caching can take ~10 more minutes to show changes.");
+        } catch (e) {
+          toast("Couldn't reach the sync trigger: " + e.message, "error");
+        }
+        applySyncButtonState(syncBtn);
+      });
+    }
     root().querySelectorAll(".rp-embed").forEach((b) => b.addEventListener("click", () => copyEmbed(b.dataset.filename, b)));
     root().querySelectorAll(".rp-edit").forEach((b) => b.addEventListener("click", () => openEditForm(rows.find((r) => r.id === b.dataset.id))));
     root().querySelectorAll(".rp-remove").forEach((b) => b.addEventListener("click", () => removeRow(b.dataset.id)));
