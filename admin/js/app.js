@@ -2226,8 +2226,10 @@
     const asOwner = $("cu-as-owner").checked;
     const groupName = state.groups.find((g) => g.id === groupId)?.displayName || "";
 
-    // OWNER MODE: file a MemberRequests row for admin approval; do not provision directly.
-    if (role === "owner") {
+    // OWNER / FUSION ADMIN MODE: file a MemberRequests row for admin approval; do not
+    // provision directly. Fusion admins hold group-management rights only — delegated
+    // POST /users needs an Entra directory role they don't have (403 otherwise).
+    if (role === "owner" || role === "fusionadmin") {
       const roleSelect = $("cu-role").value;
       const roleOther = $("cu-role-other").value.trim();
       const roleVal = roleSelect === "Other" ? roleOther : roleSelect;
