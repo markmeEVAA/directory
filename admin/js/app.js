@@ -1182,19 +1182,10 @@
   }
 
   $("add-owner-btn").addEventListener("click", () => openAddPanel("owner"));
-  // Owner mode: + Add Member skips the user-search panel and opens the Create User
-  // form directly (pre-filled with current group, group selector locked). On submit
-  // we file a MemberRequests row instead of provisioning directly — admin approves.
-  $("add-member-btn").addEventListener("click", () => {
-    if (role === "owner") {
-      openCreateUserPanel(currentDetailGroup ? currentDetailGroup.id : null);
-      // Lock the group selector — owners can only request additions to the current group.
-      const sel = $("cu-group");
-      if (sel) sel.disabled = true;
-    } else {
-      openAddPanel("member");
-    }
-  });
+  // + Add Member opens the user-search panel for everyone. Owners adding an EXISTING
+  // account write directly via group ownership (instant, like Fusion admins); the
+  // panel's "+ Create new user" still files a MemberRequests row for admin approval.
+  $("add-member-btn").addEventListener("click", () => openAddPanel("member"));
   $("add-panel-close").addEventListener("click", closeAddPanel);
 
   let searchDebounce;
@@ -2122,6 +2113,8 @@
       .map((g) => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.displayName)}</option>`)
       .join("");
     if (presetGroupId) sel.value = presetGroupId;
+    // Lock the group selector — owners can only request additions to the current group.
+    sel.disabled = role === "owner";
     $("create-user-progress").classList.add("hidden");
     $("create-user-result").classList.add("hidden");
     $("create-user-form").classList.remove("hidden");
