@@ -14,12 +14,14 @@ const GRAPH = (() => {
 
   // List + library names (must match the SP provisioning)
   const FINANCE_LIST = "FinanceRequests";
-  const RECEIPT_LIBRARY = "FinanceReceipts";
+  const RECEIPT_LIBRARY = "FinanceReceipts";   // receipts, one folder per sport
+  const W9_LIBRARY = "FinanceW9s";             // W-9s — restricted to EVAA - Billing
+  const W9_REQUEST_TYPE = "W-9 Submission";
   const AUDIT_LIST = "AdminActionLog";
   const OPTIONS_LIST = "FinanceFormOptions";
 
   // Option types — must match FinanceFormOptions OptionType choice column
-  const OPTION_TYPES = ["Sport", "ExpenseCategory", "ProgramType", "TravelingSubtype", "Season", "VendorCardinality", "RequestType"];
+  const OPTION_TYPES = ["Sport", "ExpenseCategory", "ProgramType", "Program", "TravelingSubtype", "Season", "VendorCardinality", "RequestType"];
 
   // Console access gate — membership in ANY of these grants access:
   //   EVAA Finance       — finance committee + treasurer mailbox
@@ -208,7 +210,7 @@ const GRAPH = (() => {
     // (DifferentMailingAddress is just the checkbox controlling whether
     // the alt-address fields are visible; the alt values themselves are
     // sent if present).
-    const { DifferentMailingAddress, ...formValues } = values;
+    const { DifferentMailingAddress, Receipt: _r, W9File: _w, ...formValues } = values;
 
     const payload = {
       ...formValues,
@@ -242,7 +244,8 @@ const GRAPH = (() => {
     const items = await callGraphAll(
       `/sites/${siteId}/lists/${encodeURIComponent(OPTIONS_LIST)}/items?expand=fields&$top=999`
     );
-    // Shape: [{ id, title, type, code, order, active }]
+    // Shape: [{ id, title, type, code, order, active, sport, programType }]
+    // sport / programType are only used on Program rows (ForSport / ForProgramType columns).
     const opts = items.map((it) => {
       const f = it.fields || {};
       return {
@@ -252,6 +255,8 @@ const GRAPH = (() => {
         code: f.AccountCode || "",
         order: typeof f.DisplayOrder === "number" ? f.DisplayOrder : 0,
         active: f.Active !== false,
+        sport: f.ForSport || "",
+        programType: f.ForProgramType || "",
       };
     });
     _optionsCache = opts;
@@ -275,9 +280,10 @@ const GRAPH = (() => {
   }
 
   // CRUD for the Options tab in the admin console
-  async function createFormOption({ title, type, code, order, active }) {
+  async function createFormOption({ title, type, code, order, active, sport, programType }) {
     const siteId = await getSiteId();
     const fields = { Title: title, OptionType: type, AccountCode: code || "", DisplayOrder: order || 0, Active: active !== false };
+    if (type === "Program") { fields.ForSport = sport || ""; fields.ForProgramType = programType || ""; }
     _optionsCache = null;
     return callGraph(`/sites/${siteId}/lists/${encodeURIComponent(OPTIONS_LIST)}/items`, {
       method: "POST",
@@ -317,17 +323,26 @@ const GRAPH = (() => {
     return callGraph(`/sites/${siteId}/lists/${encodeURIComponent(FINANCE_LIST)}/items/${itemId}?expand=fields`);
   }
 
-  // The submission flow uploads receipts to FinanceReceipts named "{itemId}__{filename}",
-  // but does NOT patch the FinanceRequests item's ReceiptUrl field (removed from the flow
-  // to dodge SP UpdateItem's required-field constraint). So the console finds the receipt
-  // by scanning the library for files starting with that prefix.
-  // Returns { name, webUrl } or null if no receipt was uploaded.
-  async function getReceiptForRequest(itemId) {
+  // The submission flow uploads files named "{itemId}__{filename}" — receipts into
+  // FinanceReceipts/<Sport>/, W-9s into FinanceW9s — but does NOT patch the
+  // FinanceRequests item's ReceiptUrl field (removed from the flow to dodge SP
+  // UpdateItem's required-field constraint). So the console finds the file by
+  // scanning the library (list items are returned across all folders) for that prefix.
+  // Returns { name, webUrl, ... }, null if none was uploaded, or { restricted: true }
+  // when the viewer can't open the W-9 library (it's limited to EVAA - Billing).
+  async function getReceiptForRequest(itemId, requestType) {
     const siteId = await getSiteId();
+    const library = requestType === W9_REQUEST_TYPE ? W9_LIBRARY : RECEIPT_LIBRARY;
     try {
-      const items = await callGraphAll(
-        `/sites/${siteId}/lists/${encodeURIComponent(RECEIPT_LIBRARY)}/items?expand=driveItem,fields(select=FileLeafRef)&$top=999`
-      );
+      let items;
+      try {
+        items = await callGraphAll(
+          `/sites/${siteId}/lists/${encodeURIComponent(library)}/items?expand=driveItem,fields(select=FileLeafRef)&$top=999`
+        );
+      } catch (e) {
+        if (library === W9_LIBRARY && /Graph (403|404)/.test(e.message)) return { restricted: true };
+        throw e;
+      }
       const prefix = String(itemId) + "__";
       const match = items.find((it) => {
         const name = (it.fields && it.fields.FileLeafRef) || (it.driveItem && it.driveItem.name) || "";

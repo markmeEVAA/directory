@@ -61,7 +61,15 @@
 
   // ─── Form state ────────────────────────────────────────────────────────────
   const values = {};
-  let receiptFile = null;
+  const files = {}; // fieldId -> File (Receipt, W9File)
+
+  // Leadership / finance / portal admins see every sport's programs in the
+  // Program dropdown; everyone else sees only the chosen sport's programs.
+  try {
+    SCHEMA.setContext({ seeAllPrograms: await GRAPH.isTreasurerOrAdmin() });
+  } catch (e) {
+    console.warn("Group check failed (non-fatal, showing sport-filtered programs):", e);
+  }
 
   // Load dropdown options from FinanceFormOptions list before first render
   try {
@@ -93,13 +101,18 @@
     let control;
     const reqAttr = required ? "required" : "";
     switch (field.type) {
-      case "choice":
+      case "choice": {
+        const opts = SCHEMA.optionsFor(field, values);
+        // Drop a stale answer that's no longer offered (e.g. Category after the
+        // request type changed, or Program after the sport changed).
+        if (cur && !opts.includes(cur)) delete values[field.id];
         control = `<select id="${id}" data-field="${field.id}" ${reqAttr}>
           <option value="">— select —</option>
-          ${field.options.map((o) =>
+          ${opts.map((o) =>
             `<option value="${escapeAttr(o)}" ${cur === o ? "selected" : ""}>${escapeHtml(o)}</option>`).join("")}
         </select>`;
         break;
+      }
       case "textarea":
         control = `<textarea id="${id}" data-field="${field.id}" rows="3" ${reqAttr}>${escapeHtml(cur)}</textarea>`;
         break;
@@ -118,12 +131,14 @@
       case "tel":
         control = `<input id="${id}" data-field="${field.id}" type="tel" value="${escapeAttr(cur)}" autocomplete="tel" ${reqAttr}>`;
         break;
-      case "file":
+      case "file": {
+        const picked = files[field.id];
         control = `<div class="file-control">
             <input id="${id}" data-field="${field.id}" type="file" accept="image/*,application/pdf" capture="environment">
-            <div class="help" id="${id}-name" style="display:none;"></div>
+            <div class="help" id="${id}-name" style="${picked ? "" : "display:none;"}">${picked ? `Selected: ${escapeHtml(picked.name)} (${formatBytes(picked.size)})` : ""}</div>
           </div>`;
         break;
+      }
       case "boolean":
         // Render as a checkbox with the label INSIDE the field block (not above as a separate <label>).
         return `<div class="field" data-field-wrap="${field.id}" style="display:flex;align-items:flex-start;gap:8px;">
@@ -178,7 +193,8 @@
     if (!fid) return;
     if (e.target.type === "file") {
       const f = e.target.files && e.target.files[0];
-      receiptFile = f || null;
+      if (f) { files[fid] = f; values[fid] = f.name; }
+      else { delete files[fid]; delete values[fid]; }
       const nameEl = document.getElementById(e.target.id + "-name");
       if (f && nameEl) {
         nameEl.style.display = "block";
@@ -237,8 +253,8 @@
     if (missing.length) {
       return `Please fill in: ${missing.map((f) => f.label).join(", ")}`;
     }
-    // Spot-check amount
-    if (values.Amount !== undefined && values.Amount !== "") {
+    // Spot-check amount (only when the Amount field is actually on screen)
+    if (visible.some((f) => f.id === "Amount") && values.Amount !== undefined && values.Amount !== "") {
       const n = Number(values.Amount);
       if (!Number.isFinite(n) || n <= 0) return "Amount must be a positive number.";
     }
@@ -260,9 +276,20 @@
       // smuggle stale data from sections the user toggled away).
       const visible = SCHEMA.visibleFields(values);
       const payload = {};
-      visible.forEach((f) => { payload[f.id] = values[f.id] ?? null; });
+      visible.forEach((f) => { if (f.type !== "file") payload[f.id] = values[f.id] ?? null; });
 
-      const result = await GRAPH.submitFinanceRequest(payload, receiptFile);
+      // W-9 answers live in their own fields on screen; map them onto the
+      // standard request fields the flow and the console already understand.
+      let file = files.Receipt || null;
+      if (payload.RequestType === SCHEMA.W9) {
+        payload.VendorName = payload.W9Name;
+        payload.Sport = payload.W9Sport || null;
+        payload.Notes = payload.W9Notes || null;
+        delete payload.W9Name; delete payload.W9Sport; delete payload.W9Notes;
+        file = files.W9File || null;
+      }
+
+      const result = await GRAPH.submitFinanceRequest(payload, file);
       const refId = result && result.id ? `Reference #${result.id}` : "";
       $("success-ref").textContent = refId;
       show("view-success");
@@ -276,7 +303,7 @@
   $("reset-btn").addEventListener("click", () => {
     if (!confirm("Clear the form?")) return;
     Object.keys(values).forEach((k) => delete values[k]);
-    receiptFile = null;
+    Object.keys(files).forEach((k) => delete files[k]);
     values.DateRequested = new Date().toISOString().slice(0, 10);
     values.FirstName = me.givenName || "";
     values.LastName = me.surname || "";

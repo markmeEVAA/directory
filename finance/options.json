@@ -1,19 +1,42 @@
 {
-  "_comment": "Public dropdown-options feed for the EVAA Finance submission form. Served at https://markmeevaa.github.io/directory/finance/options.json (no auth). Snapshot 2026-07-20; to be auto-republished by the 'EVAA - Publish Finance Options' Power Automate flow whenever FinanceFormOptions changes.",
-  "RequestType": ["Check Request", "Deposit Request", "Credit Card Use"],
+  "_comment": "Fallback dropdown-options feed for the EVAA Finance submission form. The form first asks the live 'EVAA - Get Finance Options' flow (reads FinanceFormOptions directly, so console edits show up right away); this file is only used if that call fails. Snapshot 2026-11-08.",
+  "RequestType": ["Check Request", "Deposit Request", "Credit Card Use", "W-9 Submission"],
   "Sport": [
-    "Baseball", "Basketball", "Cross Country Running", "Football", "Lacrosse",
-    "Soccer", "Softball", "Tennis", "Track", "Trap", "Volleyball", "Wrestling",
-    "XC Ski", "Multi-Sport / Operations", "Other (note in details)"
+    "Baseball", "Basketball", "Cross Country Running", "Cross Country Skiing", "Football", "Lacrosse",
+    "Soccer", "Softball", "Swimming", "Tennis", "Track", "Volleyball", "Wrestling",
+    "General Fund", "Multi-Sport / Operations", "Other (note in details)"
   ],
   "ExpenseCategory": [
-    "Coaching Fees", "Tournament Registration Fees", "Tournament Registration Fees Income",
-    "Concession Income", "Equipment", "Uniforms", "Field/Facility Rental", "Officials / Refs",
-    "Awards / Trophies", "Insurance", "Background Checks", "Training / Clinics",
-    "Travel / Lodging", "Marketing / Promotion", "Office / Supplies", "Bank Fees",
-    "Reimbursement", "Miscellaneous Income", "Other (note in details)"
+    "Revenue - Player Registrations", "Revenue - Clinic Registrations", "Revenue - Concessions",
+    "Revenue - Tournament Team Registrations", "Revenue - Tournament Gate Fee", "Revenue - Tournament Contributions",
+    "Revenue - Parent Contributions", "Revenue - Fundraising", "Revenue - Contributions & Donations",
+    "Revenue - EVAA Sportswear", "Revenue - Miscellaneous",
+    "Expense - Advertising", "Expense - Accounting Fees", "Expense - Bank Service Fees", "Expense - Clinic Expenses",
+    "Expense - Clinic Coaching Fees", "Expense - Coaching Fees", "Expense - Coaches Apparel",
+    "Expense - Concession Supplies", "Expense - Contributions & Donations", "Expense - Equipment",
+    "Expense - EVAA Sponsored Events", "Expense - EVAA Sportswear Apparel", "Expense - Facilities Rental",
+    "Expense - Field Maintenance", "Expense - Field Supplies", "Expense - Fundraising", "Expense - Insurance",
+    "Expense - Internet Costs", "Expense - League Entry Fees", "Expense - Licenses & Permits",
+    "Expense - Marketing Costs", "Expense - Membership Dues", "Expense - Meeting Costs", "Expense - Office Supplies",
+    "Expense - Other Costs", "Expense - Parent Fundraising Distribution", "Expense - Player Development",
+    "Expense - Player Financial Support", "Expense - Player Uniforms", "Expense - PlayMetrics Fees",
+    "Expense - Postage", "Expense - Professional Fees", "Expense - Printing", "Expense - Referees & Umpires",
+    "Expense - Risk Management", "Expense - Scholarships", "Expense - Sports Engine Fees",
+    "Expense - Storage Rental", "Expense - Tax Services", "Expense - Team Celebrations",
+    "Expense - Tournament Team Registrations", "Expense - Tournament Other Costs", "Expense - Travel",
+    "Expense - Trophies, Medals & Ribbons", "Expense - Tryout Costs", "Expense - Website Development"
   ],
-  "ProgramType": ["Traveling", "In-House", "All", "N/A"],
+  "ProgramType": ["Traveling", "In-House", "Tournament", "Fundraising", "All", "N/A"],
+  "Program": [
+    { "title": "Basketball - Boys", "sport": "Basketball", "programType": "Traveling" },
+    { "title": "Basketball - Girls", "sport": "Basketball", "programType": "Traveling" },
+    { "title": "Basketball - Boys Tournament", "sport": "Basketball", "programType": "Tournament" },
+    { "title": "Basketball - Girls Tournament", "sport": "Basketball", "programType": "Tournament" },
+    { "title": "Basketball - Fundraising", "sport": "Basketball", "programType": "Fundraising" },
+    { "title": "Volleyball - JO Girls", "sport": "Volleyball", "programType": "Traveling" },
+    { "title": "Volleyball - JO Boys", "sport": "Volleyball", "programType": "Traveling" },
+    { "title": "Baseball - 12U Program", "sport": "Baseball", "programType": "Traveling" }
+  ],
   "TravelingSubtype": ["Fall Traveling", "Spring Traveling", "Summer Traveling", "Winter Traveling"],
   "Season": [
     "This request is for the current season.",

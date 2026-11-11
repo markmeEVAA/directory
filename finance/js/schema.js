@@ -3,66 +3,135 @@
 //
 // The form *shape* (sections, field IDs, conditional visibility) is fixed here.
 // The dropdown *contents* live in SharePoint list "FinanceFormOptions" and are
-// loaded async via GRAPH.getOptionsByType(). Call `await SCHEMA.load()` once on
-// page boot before the first render — see app.js.
+// loaded async by SCHEMA.load(). Call `await SCHEMA.load()` once on page boot
+// before the first render — see app.js.
 //
-// To add a new sport / category / etc., treasurer edits the SP list. No code change.
+// To add a new sport / category / program etc., the treasurer edits the options in
+// the console (Options tab). No code change.
+//
+// Conventions the form relies on (documented in the console's Options tab too):
+//   • Categories starting "Revenue - " show only on Deposit Requests; categories
+//     starting "Expense - " show only on Check Requests and Credit Card Use.
+//     Anything without either prefix shows on every request type.
+//   • Program rows carry a Sport (ForSport) and a Program type (ForProgramType).
+//     The submitter picks Sport → Program type → Program; only programs matching
+//     both show. Leadership / finance / portal admins see every sport's programs.
 
 const SCHEMA = (() => {
+  const W9 = "W-9 Submission";
+
   // ─── DYNAMIC ENUMS — baked defaults, refreshed by load() ──────────────────
-  // These defaults are a SNAPSHOT of the FinanceFormOptions SP list (2026-07-20).
-  // They are populated (not empty) on purpose: the submission form is used by
-  // coaches / members / AV Fusion folks who do NOT have access to the board
-  // SharePoint site, so their SCHEMA.load() read of the options list fails. With
-  // real values baked in here, the form still shows every dropdown for everyone.
-  // The treasurer console (board members, who DO have site access) refreshes these
-  // from the live list via load(). ⚠️ When the treasurer edits options in the SP
-  // list, re-snapshot this block so the public form stays in sync (or move options
-  // to a public feed — see note in load()).
+  // Snapshot of FinanceFormOptions (2026-11-08). Kept populated so the form still
+  // works if both the live feed and options.json are unreachable.
   const enums = {
-    REQUEST_TYPES: ["Check Request", "Deposit Request", "Credit Card Use"],
+    REQUEST_TYPES: ["Check Request", "Deposit Request", "Credit Card Use", W9],
     SPORTS: [
-      "Baseball", "Basketball", "Cross Country Running", "Football", "Lacrosse",
-      "Soccer", "Softball", "Tennis", "Track", "Trap", "Volleyball", "Wrestling",
-      "XC Ski", "Multi-Sport / Operations", "Other (note in details)",
+      "Baseball", "Basketball", "Cross Country Running", "Cross Country Skiing", "Football", "Lacrosse",
+      "Soccer", "Softball", "Swimming", "Tennis", "Track", "Volleyball", "Wrestling",
+      "General Fund", "Multi-Sport / Operations", "Other (note in details)",
     ],
-    PROGRAM_TYPE: ["Traveling", "In-House", "All", "N/A"],
+    PROGRAM_TYPE: ["Traveling", "In-House", "Tournament", "Fundraising", "All", "N/A"],
+    // [{ title, sport, programType }]
+    PROGRAMS: [
+      { title: "Basketball - Boys", sport: "Basketball", programType: "Traveling" },
+      { title: "Basketball - Girls", sport: "Basketball", programType: "Traveling" },
+      { title: "Basketball - Boys Tournament", sport: "Basketball", programType: "Tournament" },
+      { title: "Basketball - Girls Tournament", sport: "Basketball", programType: "Tournament" },
+      { title: "Basketball - Fundraising", sport: "Basketball", programType: "Fundraising" },
+      { title: "Volleyball - JO Girls", sport: "Volleyball", programType: "Traveling" },
+      { title: "Volleyball - JO Boys", sport: "Volleyball", programType: "Traveling" },
+      { title: "Baseball - 12U Program", sport: "Baseball", programType: "Traveling" },
+    ],
     TRAVELING_SUBTYPE: ["Fall Traveling", "Spring Traveling", "Summer Traveling", "Winter Traveling"],
     SEASON: [
       "This request is for the current season.",
       "This request is for the upcoming season.",
     ],
     EXPENSE_CATEGORY: [
-      "Coaching Fees", "Tournament Registration Fees", "Tournament Registration Fees Income",
-      "Concession Income", "Equipment", "Uniforms", "Field/Facility Rental", "Officials / Refs",
-      "Awards / Trophies", "Insurance", "Background Checks", "Training / Clinics",
-      "Travel / Lodging", "Marketing / Promotion", "Office / Supplies", "Bank Fees",
-      "Reimbursement", "Miscellaneous Income", "Other (note in details)",
+      "Revenue - Player Registrations", "Revenue - Clinic Registrations", "Revenue - Concessions",
+      "Revenue - Tournament Team Registrations", "Revenue - Tournament Gate Fee", "Revenue - Tournament Contributions",
+      "Revenue - Parent Contributions", "Revenue - Fundraising", "Revenue - Contributions & Donations",
+      "Revenue - EVAA Sportswear", "Revenue - Miscellaneous",
+      "Expense - Advertising", "Expense - Accounting Fees", "Expense - Bank Service Fees", "Expense - Clinic Expenses",
+      "Expense - Clinic Coaching Fees", "Expense - Coaching Fees", "Expense - Coaches Apparel",
+      "Expense - Concession Supplies", "Expense - Contributions & Donations", "Expense - Equipment",
+      "Expense - EVAA Sponsored Events", "Expense - EVAA Sportswear Apparel", "Expense - Facilities Rental",
+      "Expense - Field Maintenance", "Expense - Field Supplies", "Expense - Fundraising", "Expense - Insurance",
+      "Expense - Internet Costs", "Expense - League Entry Fees", "Expense - Licenses & Permits",
+      "Expense - Marketing Costs", "Expense - Membership Dues", "Expense - Meeting Costs", "Expense - Office Supplies",
+      "Expense - Other Costs", "Expense - Parent Fundraising Distribution", "Expense - Player Development",
+      "Expense - Player Financial Support", "Expense - Player Uniforms", "Expense - PlayMetrics Fees",
+      "Expense - Postage", "Expense - Professional Fees", "Expense - Printing", "Expense - Referees & Umpires",
+      "Expense - Risk Management", "Expense - Scholarships", "Expense - Sports Engine Fees",
+      "Expense - Storage Rental", "Expense - Tax Services", "Expense - Team Celebrations",
+      "Expense - Tournament Team Registrations", "Expense - Tournament Other Costs", "Expense - Travel",
+      "Expense - Trophies, Medals & Ribbons", "Expense - Tryout Costs", "Expense - Website Development",
     ],
     VENDOR_CARDINALITY: ["Single Vendor", "Multiple Vendors"],
   };
 
-  // Apply a { OptionType: [strings] } map onto enums, guarding empties so a
+  // Viewer context. Leadership / finance / portal admins see every sport's programs.
+  const context = { seeAllPrograms: false };
+  function setContext(c) { Object.assign(context, c || {}); }
+
+  // Live options feed — SAS-signed Power Automate trigger for "EVAA - Get Finance Options".
+  // Reads FinanceFormOptions as web-admin and returns active rows, so console edits reach
+  // every submitter (coaches don't have Board Portal SharePoint access). Read-only.
+  const LIVE_OPTIONS_URL = "https://defaultb5897a1bb85b42bd8e619b021b67d2.ce.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/07/workflows/b0cda7b0ad7946f0a45789b21e72ce41/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=rDARDeSDKYu84yyc0tCBoDINSQ0y3hln2Q--mSI-5IM";
+
+  // Apply a { OptionType: [...] } map onto enums, guarding empties so a
   // partial source never blanks a populated dropdown.
   function applyOptions(j) {
     if (j.Sport?.length)             enums.SPORTS             = j.Sport;
     if (j.ExpenseCategory?.length)   enums.EXPENSE_CATEGORY   = j.ExpenseCategory;
     if (j.ProgramType?.length)       enums.PROGRAM_TYPE       = j.ProgramType;
+    if (Array.isArray(j.Program))    enums.PROGRAMS           = j.Program;
     if (j.TravelingSubtype?.length)  enums.TRAVELING_SUBTYPE  = j.TravelingSubtype;
     if (j.Season?.length)            enums.SEASON             = j.Season;
     if (j.VendorCardinality?.length) enums.VENDOR_CARDINALITY = j.VendorCardinality;
     if (j.RequestType?.length)       enums.REQUEST_TYPES      = j.RequestType;
   }
 
-  // Async loader — populates `enums`, most-available source first:
-  //   1) PUBLIC options.json feed — no auth, works for every submitter (coaches,
-  //      members, AV Fusion). Republished by a Power Automate flow when admins edit
-  //      the FinanceFormOptions list, so the form stays dynamic without SharePoint access.
-  //   2) Live Graph read of FinanceFormOptions — for console users / anyone with site access.
-  //   3) Baked defaults already in `enums` — last-resort fallback.
-  // Idempotent; safe to await multiple times.
+  // Turn flat option rows [{ title, type, order, sport, programType }] (live feed or
+  // Graph) into the { OptionType: [...] } map applyOptions() expects.
+  function rowsToMap(rows) {
+    const sorted = rows.slice().sort((a, b) => ((a.order || 0) - (b.order || 0)) || String(a.title).localeCompare(String(b.title)));
+    const m = {};
+    for (const r of sorted) {
+      if (!r.type || !r.title) continue;
+      (m[r.type] = m[r.type] || []).push(
+        r.type === "Program" ? { title: r.title, sport: r.sport || "", programType: r.programType || "" } : r.title
+      );
+    }
+    if (!m.Program) m.Program = []; // an empty program list is valid (all deactivated)
+    return m;
+  }
+
+  async function fetchWithTimeout(url, opts, ms) {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), ms);
+    try { return await fetch(url, { ...opts, signal: ctl.signal }); }
+    finally { clearTimeout(t); }
+  }
+
+  // Async loader — populates `enums`, most-current source first:
+  //   1) Live feed flow (no auth needed; reflects console edits immediately).
+  //   2) options.json snapshot shipped with the site.
+  //   3) Live Graph read of FinanceFormOptions — for anyone with site access.
+  //   4) Baked defaults already in `enums`.
   async function load() {
-    // 1) Public feed.
+    if (!LIVE_OPTIONS_URL.startsWith("TODO_")) {
+      try {
+        const resp = await fetchWithTimeout(LIVE_OPTIONS_URL, { cache: "no-store" }, 6000);
+        if (resp.ok) {
+          const j = await resp.json();
+          if (j && Array.isArray(j.options) && j.options.length) { applyOptions(rowsToMap(j.options)); return; }
+        }
+      } catch (e) {
+        console.warn("Live options feed unavailable, trying options.json:", e);
+      }
+    }
+
     try {
       const url = new URL("./options.json", document.baseURI).href + "?_=" + Date.now();
       const resp = await fetch(url, { cache: "no-store" });
@@ -71,38 +140,44 @@ const SCHEMA = (() => {
         if (j && !j.error) { applyOptions(j); return; }
       }
     } catch (e) {
-      console.warn("options.json feed unavailable, trying Graph:", e);
+      console.warn("options.json unavailable, trying Graph:", e);
     }
 
-    // 2) Live Graph read (requires site access).
-    if (typeof GRAPH === "undefined" || !GRAPH.getOptionsByType) return; // graph.js not loaded — keep defaults
+    if (typeof GRAPH === "undefined" || !GRAPH.getFinanceFormOptions) return;
     try {
-      const [sports, cats, prog, travel, season, vendor, req] = await Promise.all([
-        GRAPH.getOptionsByType("Sport"),
-        GRAPH.getOptionsByType("ExpenseCategory"),
-        GRAPH.getOptionsByType("ProgramType"),
-        GRAPH.getOptionsByType("TravelingSubtype"),
-        GRAPH.getOptionsByType("Season"),
-        GRAPH.getOptionsByType("VendorCardinality"),
-        GRAPH.getOptionsByType("RequestType"),
-      ]);
-      applyOptions({
-        Sport: sports.map((o) => o.title),
-        ExpenseCategory: cats.map((o) => o.title),
-        ProgramType: prog.map((o) => o.title),
-        TravelingSubtype: travel.map((o) => o.title),
-        Season: season.map((o) => o.title),
-        VendorCardinality: vendor.map((o) => o.title),
-        RequestType: req.map((o) => o.title),
-      });
+      const all = await GRAPH.getFinanceFormOptions();
+      applyOptions(rowsToMap(all.filter((o) => o.active)));
     } catch (e) {
       console.warn("SCHEMA.load() Graph read failed — falling back to defaults:", e);
     }
   }
 
+  // ─── Dependent option lists ───────────────────────────────────────────────
+  function programsFor(values) {
+    const kind = values.ProgramType;
+    if (!kind) return [];
+    return enums.PROGRAMS
+      .filter((p) => p.programType === kind && (context.seeAllPrograms || p.sport === values.Sport))
+      .map((p) => p.title);
+  }
+
+  function categoriesFor(values) {
+    const all = enums.EXPENSE_CATEGORY;
+    const t = values.RequestType;
+    const isRev = (c) => /^revenue\s*-/i.test(c);
+    const isExp = (c) => /^expense\s*-/i.test(c);
+    if (t === "Deposit Request") return all.filter((c) => !isExp(c));
+    if (t === "Check Request" || t === "Credit Card Use") return all.filter((c) => !isRev(c));
+    return all;
+  }
+
+  const notW9 = (v) => v.RequestType !== W9;
+  const isW9 = (v) => v.RequestType === W9;
+
   // ─── FORM SECTIONS ────────────────────────────────────────────────────────
-  // Sections reference enums.* indirectly via a getter so the renderer always
-  // sees the latest values after load().
+  // Choice fields expose `options` (getter, static list) or `optionsFor(values)`
+  // (list depends on other answers). `showIf(values)` hides a field/section;
+  // `dependsOn` lists the fields that trigger a re-render when they change.
   const sections = [
     {
       id: "request_type",
@@ -110,11 +185,11 @@ const SCHEMA = (() => {
       fields: [
         {
           id: "RequestType",
-          label: "Is this a check request, deposit request, or credit card use?",
+          label: "What are you submitting?",
           type: "choice",
           required: true,
           get options() { return enums.REQUEST_TYPES; },
-          help: "All other questions are the same regardless of choice. We just need to know which.",
+          help: "Check request, deposit, credit card use — or a vendor's W-9 form.",
         },
       ],
     },
@@ -131,8 +206,25 @@ const SCHEMA = (() => {
       ],
     },
     {
+      id: "w9",
+      title: "W-9 details",
+      showIf: isW9,
+      dependsOn: ["RequestType"],
+      help: "W-9s contain tax ID numbers, so they're stored in a separate, restricted folder that only the treasurer's billing group can open.",
+      fields: [
+        { id: "W9Name", label: "Vendor / payee name (as shown on the W-9)", type: "text", required: true },
+        { id: "W9Sport", label: "Sport / Program this vendor works with (optional)", type: "choice", required: false,
+          get options() { return enums.SPORTS; } },
+        { id: "W9File", label: "Attach the W-9", type: "file", required: true,
+          help: "PDF or a clear photo of the signed W-9." },
+        { id: "W9Notes", label: "Notes (optional)", type: "textarea", required: false },
+      ],
+    },
+    {
       id: "counterparty",
       title: "Vendor / Payer",
+      showIf: notW9,
+      dependsOn: ["RequestType"],
       fields: [
         {
           id: "VendorCardinality",
@@ -178,7 +270,6 @@ const SCHEMA = (() => {
         { id: "PayeeZip", label: "Zip", type: "text",
           requiredWhen: { field: "RequestType", equals: "Check Request" } },
         // "Send to a different address" toggle — Check only.
-        // When checked, the AltPayee* fields below it become visible inline.
         {
           id: "DifferentMailingAddress",
           label: "Send the check to a different address",
@@ -187,8 +278,6 @@ const SCHEMA = (() => {
           when: { field: "RequestType", equals: "Check Request" },
           help: "Check this if the check should be mailed somewhere other than the vendor address.",
         },
-        // Alt mailing address — appears directly under the checkbox when it's ticked.
-        // Required iff visible.
         { id: "AltPayeeName", label: "Recipient name", type: "text",
           when: { field: "DifferentMailingAddress", equals: true },
           requiredWhen: { field: "DifferentMailingAddress", equals: true },
@@ -210,10 +299,23 @@ const SCHEMA = (() => {
     {
       id: "details",
       title: "Details",
+      showIf: notW9,
+      dependsOn: ["RequestType"],
       fields: [
         { id: "Sport", label: "Sport / Program", type: "choice", required: true, get options() { return enums.SPORTS; },
           help: "This is how the treasurer reconciles the request — pick the right sport even if the spend is shared." },
-        { id: "ProgramType", label: "Program type", type: "choice", required: false, get options() { return enums.PROGRAM_TYPE; } },
+        { id: "ProgramType", label: "Program type", type: "choice", required: false,
+          get options() { return enums.PROGRAM_TYPE; },
+          help: "Traveling, in-house, tournament, etc. Picking one shows the matching programs for your sport." },
+        {
+          id: "Program",
+          label: "Which program?",
+          type: "choice",
+          required: false,
+          optionsFor: programsFor,
+          showIf: (v) => programsFor(v).length > 0,
+          dependsOn: ["Sport", "ProgramType"],
+        },
         {
           id: "TravelingSubtype",
           label: "Which traveling season?",
@@ -223,7 +325,13 @@ const SCHEMA = (() => {
           when: { field: "ProgramType", equals: "Traveling" },
         },
         { id: "Season", label: "What season is this request for?", type: "choice", required: false, get options() { return enums.SEASON; } },
-        { id: "Category", label: "Expense / income category", type: "choice", required: true, get options() { return enums.EXPENSE_CATEGORY; } },
+        { id: "Category", label: "Expense / income category", type: "choice", required: true,
+          optionsFor: categoriesFor, dependsOn: ["RequestType"],
+          labelByType: {
+            "Deposit Request": "Income category",
+            "Check Request": "Expense category",
+            "Credit Card Use": "Expense category",
+          } },
         {
           id: "Amount",
           label: "Total amount",
@@ -247,17 +355,21 @@ const SCHEMA = (() => {
         },
       ],
     },
-    // (alternate_payee section removed — alt-address fields moved inline above,
-    // appearing right under the "Send to a different address" checkbox.)
   ];
 
   // ─── EVALUATOR ────────────────────────────────────────────────────────────
   function isVisible(node, values) {
+    if (typeof node.showIf === "function" && !node.showIf(values)) return false;
     const cond = node.when;
     if (!cond) return true;
     const actual = values[cond.field];
     if (Array.isArray(cond.equals)) return cond.equals.includes(actual);
     return actual === cond.equals;
+  }
+
+  function optionsFor(field, values) {
+    if (typeof field.optionsFor === "function") return field.optionsFor(values);
+    return field.options || [];
   }
 
   function labelFor(field, values) {
@@ -267,8 +379,6 @@ const SCHEMA = (() => {
     return field.label;
   }
 
-  // Resolve a field's required-ness given current form values.
-  // Honors both `required: true` and `requiredWhen: { field, equals }`.
   function isRequired(field, values) {
     if (field.required) return true;
     const rw = field.requiredWhen;
@@ -278,17 +388,18 @@ const SCHEMA = (() => {
     return actual === rw.equals;
   }
 
-  // Set of field IDs whose value-change should trigger a full re-render
-  // (because some other field's visibility/required-ness depends on them).
-  // Computed from all `when` and `requiredWhen` predicates across the schema.
+  // Field IDs whose change should trigger a full re-render (some other field's
+  // visibility, required-ness or option list depends on them).
   function gatingFieldIds() {
     const ids = new Set();
+    const addNode = (n) => {
+      if (n.when) ids.add(n.when.field);
+      if (n.requiredWhen) ids.add(n.requiredWhen.field);
+      (n.dependsOn || []).forEach((d) => ids.add(d));
+    };
     for (const sec of sections) {
-      if (sec.when) ids.add(sec.when.field);
-      for (const f of sec.fields) {
-        if (f.when) ids.add(f.when.field);
-        if (f.requiredWhen) ids.add(f.requiredWhen.field);
-      }
+      addNode(sec);
+      sec.fields.forEach(addNode);
     }
     return ids;
   }
@@ -307,13 +418,16 @@ const SCHEMA = (() => {
 
   return {
     load,
+    setContext,
     sections,
     isVisible,
+    optionsFor,
     labelFor,
     isRequired,
     visibleFields,
     gatingFieldIds,
     enums,
+    W9,
     sourceSurveyId: 6743,
     sourceUrl: "https://evaa.sportngin.com/survey/show/6743",
   };
