@@ -17,6 +17,7 @@
     Sport: "Sports",
     ExpenseCategory: "Expense / income categories",
     ProgramType: "Program types",
+    Program: "Programs (per sport)",
     TravelingSubtype: "Traveling subtypes",
     Season: "Seasons",
     VendorCardinality: "Vendor cardinality",
@@ -236,6 +237,7 @@
     const accountCode = categoryToCode[f.Category] || "";
 
     $("detail-title").textContent = `${f.RequestType || "Request"} #${item.id}`;
+    const isW9 = f.RequestType === "W-9 Submission";
 
     const rows = [
       ["Status",            `<span class="status-pill ${statusClass}">${escapeHtml(status)}</span>`],
@@ -243,10 +245,11 @@
       ["Date requested",    formatDate(f.DateRequested)],
       ["Sport",             f.Sport],
       ["Program type",      f.ProgramType],
+      ["Program",           f.Program],
       ["Traveling subtype", f.TravelingSubtype],
       ["Season",            f.Season],
-      ["Category",          f.Category + (accountCode ? ` <span style="color:#888; font-size:0.85em;">(account ${escapeHtml(accountCode)})</span>` : "")],
-      ["Amount",            formatMoney(f.Amount)],
+      ["Category",          f.Category ? escapeHtml(f.Category) + (accountCode ? ` <span style="color:#888; font-size:0.85em;">(account ${escapeHtml(accountCode)})</span>` : "") : ""],
+      ["Amount",            isW9 ? "" : formatMoney(f.Amount)],
       ["", "<hr style='border:none; border-top:1px solid #eee; margin:8px 0;'/>"],
       ["Requester",         `${escapeHtml(f.SubmittedByName || "")}<br>${escapeHtml(f.SubmittedByEmail || "")}` + (f.SubmitterPhone ? `<br>${escapeHtml(f.SubmitterPhone)}` : "")],
       ["Vendor cardinality",f.VendorCardinality],
@@ -258,7 +261,7 @@
       ["Mail check to",     [f.AltPayeeAddress, f.AltPayeeCity, f.AltPayeeState, f.AltPayeeZip].filter(Boolean).join(", ")],
       ["", "<hr style='border:none; border-top:1px solid #eee; margin:8px 0;'/>"],
       ["Notes",             f.Notes ? `<div style="white-space:pre-wrap;">${escapeHtml(f.Notes)}</div>` : ""],
-      ["Receipt",           `<div id="receipt-cell">(looking up…)</div>`],
+      [isW9 ? "W-9 file" : "Receipt", `<div id="receipt-cell">(looking up…)</div>`],
       ["Source",            f.SourceSystem || "Portal"],
       ["", "<hr style='border:none; border-top:1px solid #eee; margin:8px 0;'/>"],
       ["Treasurer notes",   `<textarea id="treasurer-notes" rows="3" style="width:100%;">${escapeHtml(f.TreasurerNotes || "")}</textarea>`],
@@ -303,10 +306,14 @@
     $("detail-overlay").classList.remove("hidden");
 
     // Async receipt lookup + inline preview
-    GRAPH.getReceiptForRequest(item.id).then((rcpt) => {
+    GRAPH.getReceiptForRequest(item.id, f.RequestType).then((rcpt) => {
       const cell = document.getElementById("receipt-cell");
       if (!cell) return;
       if (!rcpt) { cell.textContent = "(none uploaded)"; return; }
+      if (rcpt.restricted) {
+        cell.textContent = "Restricted — W-9s are visible only to the EVAA - Billing group.";
+        return;
+      }
       const isImage = (rcpt.mimeType || "").startsWith("image/");
       const isPdf = (rcpt.mimeType || "") === "application/pdf";
       if (isImage && rcpt.downloadUrl) {
@@ -390,7 +397,7 @@
   function downloadCsv(rows) {
     const headers = [
       "Id", "Status", "RequestType", "DateRequested", "SubmittedByEmail", "SubmittedByName",
-      "Sport", "Category", "AccountCode", "ProgramType", "TravelingSubtype", "Season",
+      "Sport", "Category", "AccountCode", "ProgramType", "Program", "TravelingSubtype", "Season",
       "Amount", "VendorCardinality", "VendorName", "PayerName", "PayeeAddress", "PayeeCity",
       "PayeeState", "PayeeZip", "AltPayeeName", "AltPayeeAddress", "AltPayeeCity",
       "AltPayeeState", "AltPayeeZip", "Notes", "TreasurerNotes", "DecisionAt", "DecisionBy",
@@ -401,7 +408,7 @@
       const f = it.fields || {};
       const cells = [
         it.id, f.Status, f.RequestType, f.DateRequested, f.SubmittedByEmail, f.SubmittedByName,
-        f.Sport, f.Category, categoryToCode[f.Category] || "", f.ProgramType, f.TravelingSubtype, f.Season,
+        f.Sport, f.Category, categoryToCode[f.Category] || "", f.ProgramType, f.Program, f.TravelingSubtype, f.Season,
         f.Amount, f.VendorCardinality, f.VendorName, f.PayerName, f.PayeeAddress, f.PayeeCity,
         f.PayeeState, f.PayeeZip, f.AltPayeeName, f.AltPayeeAddress, f.AltPayeeCity,
         f.AltPayeeState, f.AltPayeeZip, f.Notes, f.TreasurerNotes, f.DecisionAt, f.DecisionBy,
@@ -441,25 +448,34 @@
       return;
     }
     console.log(`[finance] renderOptionsEditor: ${options.length} options loaded`);
-    const typeOrder = ["Sport", "ExpenseCategory", "ProgramType", "TravelingSubtype", "Season", "VendorCardinality", "RequestType"];
+    const typeOrder = ["Sport", "ExpenseCategory", "ProgramType", "Program", "TravelingSubtype", "Season", "VendorCardinality", "RequestType"];
+    const SECTION_HINTS = {
+      ExpenseCategory: `Start a category with <strong>"Revenue - "</strong> to show it only on Deposit Requests, or
+        <strong>"Expense - "</strong> to show it only on Check Requests and Credit Card Use. Categories without either prefix show on every request type.`,
+      Program: `Each program belongs to one sport and one program type. On the form, people pick Sport → Program type,
+        then see only the matching programs (leadership and finance see every sport's programs).`,
+    };
     try {
     container.innerHTML = typeOrder.map((type) => {
       const rows = options
         .filter((o) => o.type === type)
         .sort((a, b) => (a.order - b.order) || a.title.localeCompare(b.title));
       const showCodeCol = type === "ExpenseCategory";
+      const isProgram = type === "Program";
       return `<div class="options-section" data-type="${escapeAttr(type)}">
         <h3>${escapeHtml(OPTION_TYPE_LABELS[type] || type)} <span class="count">${rows.length}</span><span class="save-indicator" data-save="${escapeAttr(type)}"></span></h3>
+        ${SECTION_HINTS[type] ? `<p style="color:#555;font-size:0.9em;margin:4px 0 10px;">${SECTION_HINTS[type]}</p>` : ""}
         <table>
           <thead><tr>
             <th>Option text</th>
             ${showCodeCol ? "<th>Account code</th>" : ""}
+            ${isProgram ? "<th>Sport</th><th>Program type</th>" : ""}
             <th class="order-col">Order</th>
             <th class="active-col">Active</th>
             <th class="actions-col"></th>
           </tr></thead>
           <tbody>
-            ${rows.map((o) => optionRowHtml(o, showCodeCol)).join("")}
+            ${rows.map((o) => optionRowHtml(o, showCodeCol, isProgram)).join("")}
           </tbody>
         </table>
         <button class="btn-secondary btn-add" data-add="${escapeAttr(type)}">+ Add ${escapeHtml((OPTION_TYPE_LABELS[type] || type).toLowerCase().replace(/s$/, ""))}</button>
@@ -472,10 +488,24 @@
     }
   }
 
-  function optionRowHtml(opt, showCodeCol) {
+  // <select> of the active titles for one option type, with the current value kept
+  // even if it has since been deactivated (so it isn't silently lost).
+  function optionSelectHtml(field, sourceType, current) {
+    const titles = options.filter((o) => o.type === sourceType && o.active)
+      .sort((a, b) => (a.order - b.order) || a.title.localeCompare(b.title))
+      .map((o) => o.title);
+    if (current && !titles.includes(current)) titles.unshift(current);
+    return `<select data-field="${field}">
+      <option value="">— pick —</option>
+      ${titles.map((t) => `<option value="${escapeAttr(t)}" ${t === current ? "selected" : ""}>${escapeHtml(t)}</option>`).join("")}
+    </select>`;
+  }
+
+  function optionRowHtml(opt, showCodeCol, isProgram) {
     return `<tr data-opt-id="${escapeAttr(opt.id)}">
       <td><input type="text" data-field="title" value="${escapeAttr(opt.title)}" /></td>
       ${showCodeCol ? `<td class="code-col"><input type="text" data-field="code" value="${escapeAttr(opt.code)}" placeholder="e.g. 5100" /></td>` : ""}
+      ${isProgram ? `<td>${optionSelectHtml("sport", "Sport", opt.sport)}</td><td>${optionSelectHtml("programType", "ProgramType", opt.programType)}</td>` : ""}
       <td class="order-col"><input type="number" data-field="order" value="${opt.order || 0}" /></td>
       <td class="active-col"><input type="checkbox" data-field="active" ${opt.active ? "checked" : ""}/></td>
       <td class="actions-col"><button class="btn-del" data-action="delete" title="Delete">✕</button></td>
@@ -488,19 +518,31 @@
       const showCodeCol = type === "ExpenseCategory";
 
       // Inline edit
-      sec.querySelectorAll("tr[data-opt-id] input").forEach((el) => {
+      sec.querySelectorAll("tr[data-opt-id] input, tr[data-opt-id] select").forEach((el) => {
         el.addEventListener("change", async () => {
           const tr = el.closest("tr");
           const id = tr.dataset.optId;
           const fields = {};
-          tr.querySelectorAll("input[data-field]").forEach((input) => {
+          tr.querySelectorAll("[data-field]").forEach((input) => {
             const f = input.dataset.field;
             if (f === "title") fields.Title = input.value;
             else if (f === "code") fields.AccountCode = input.value;
             else if (f === "order") fields.DisplayOrder = Number(input.value) || 0;
             else if (f === "active") fields.Active = input.checked;
+            else if (f === "sport") fields.ForSport = input.value;
+            else if (f === "programType") fields.ForProgramType = input.value;
           });
           await persistOption(type, () => GRAPH.updateFormOption(id, fields));
+          // Keep the local cache in step so later renders show the saved values.
+          const local = options.find((o) => String(o.id) === String(id));
+          if (local) {
+            if ("Title" in fields) local.title = fields.Title;
+            if ("AccountCode" in fields) local.code = fields.AccountCode;
+            if ("DisplayOrder" in fields) local.order = fields.DisplayOrder;
+            if ("Active" in fields) local.active = fields.Active;
+            if ("ForSport" in fields) local.sport = fields.ForSport;
+            if ("ForProgramType" in fields) local.programType = fields.ForProgramType;
+          }
         });
       });
 
@@ -525,8 +567,15 @@
         if (!title) return;
         const order = (options.filter((o) => o.type === type).reduce((m, o) => Math.max(m, o.order), 0)) + 10;
         const code = showCodeCol ? (prompt(`Account code for "${title}" (optional):`, "") || "") : "";
+        // Programs: guess the sport from the "Sport - Program" naming; the treasurer
+        // can change sport / program type with the row's dropdowns afterwards.
+        let sport = "", programType = "";
+        if (type === "Program") {
+          const guess = options.find((o) => o.type === "Sport" && o.active && title.toLowerCase().startsWith(o.title.toLowerCase()));
+          sport = guess ? guess.title : "";
+        }
         await persistOption(type, async () => {
-          const created = await GRAPH.createFormOption({ title, type, code, order, active: true });
+          const created = await GRAPH.createFormOption({ title, type, code, order, active: true, sport, programType });
           // Add to local cache
           options.push({
             id: created.id,
@@ -535,6 +584,8 @@
             code,
             order,
             active: true,
+            sport,
+            programType,
           });
           // Rebuild categoryToCode for instant refresh of requests-tab UI
           Object.keys(categoryToCode).forEach((k) => delete categoryToCode[k]);
