@@ -173,6 +173,9 @@ const SCHEMA = (() => {
 
   const notW9 = (v) => v.RequestType !== W9;
   const isW9 = (v) => v.RequestType === W9;
+  // Vendor / Payer section: only for money going out (Check Request, Credit Card Use).
+  // Not asked on Deposits (treasurer's request, Nov 2026) or W-9s (own section).
+  const needsVendor = (v) => v.RequestType !== W9 && v.RequestType !== "Deposit Request";
 
   // ─── FORM SECTIONS ────────────────────────────────────────────────────────
   // Choice fields expose `options` (getter, static list) or `optionsFor(values)`
@@ -223,7 +226,7 @@ const SCHEMA = (() => {
     {
       id: "counterparty",
       title: "Vendor / Payer",
-      showIf: notW9,
+      showIf: needsVendor,
       dependsOn: ["RequestType"],
       fields: [
         {
