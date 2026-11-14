@@ -422,7 +422,11 @@ const EMAILLISTS = (() => {
     const a = slug(name);
     if (!a) throw new Error("Enter a valid list name.");
     if (!boardMail) throw new Error("Pick who's allowed to send to it.");
-    const smtp = a + "@evaasports.org";
+    // Fusion boards (@avfusion.org board group) get @avfusion.org lists. The sync keys the
+    // Fusion send-lock (any authenticated internal sender) off the list domain, so a Fusion list
+    // on @evaasports.org would be locked to the board group and fail to build.
+    const domain = /@avfusion\.org$/i.test(boardMail) ? "avfusion.org" : "evaasports.org";
+    const smtp = a + "@" + domain;
     await createListRow({ Title: smtp, RegistrationId: "manual-" + a, Sport: "(custom)", BoardGroup: boardMail, Source: "Manual", Status: "Active", RecipientCount: 0 });
     return smtp;
   }
