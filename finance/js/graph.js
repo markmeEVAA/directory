@@ -215,17 +215,21 @@ const GRAPH = (() => {
     const payload = {
       ...formValues,
       Amount: cleanAmount(formValues.Amount),
-      // Trust client-supplied contact info but stamp the signed-in identity so the
-      // flow can cross-check / overwrite if values were tampered with.
+      // Body-stamped identity remains as a diagnostic hint; the flow authoritative
+      // identity comes from X-Caller-Token below (Graph /me), not these fields.
       _signedInUpn: me?.userPrincipalName || me?.mail || "",
       _signedInName: me?.displayName || "",
       Receipt: receipt,
       SourceSystem: "Portal",
       ClientRequestId: newClientRequestId(),
     };
+    const token = await AUTH.getIdentityToken();
     const resp = await fetch(SUBMIT_FINANCE_REQUEST_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-Caller-Token": token,
+      },
       body: JSON.stringify(payload),
     });
     if (!resp.ok) {
