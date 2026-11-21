@@ -96,9 +96,26 @@ const AUTH = (() => {
     }
   }
 
+  // Minimal-scope token (User.Read only) — used to prove caller identity to
+  // helper flows. Flow calls Graph /me with this token; if it leaked, an
+  // attacker can only read user profiles, not modify anything. Do NOT send
+  // the full-scope token from getToken() to anything outside Graph.
+  async function getIdentityToken() {
+    if (!msalClient) throw new Error("Auth not initialized");
+    if (!activeAccount) throw new Error("No signed-in account");
+    const request = { scopes: ["User.Read"], account: activeAccount };
+    try {
+      const result = await msalClient.acquireTokenSilent(request);
+      return result.accessToken;
+    } catch (err) {
+      const result = await msalClient.acquireTokenPopup(request);
+      return result?.accessToken;
+    }
+  }
+
   function getAccount() {
     return activeAccount;
   }
 
-  return { init, signIn, signOut, getToken, getAccount };
+  return { init, signIn, signOut, getToken, getIdentityToken, getAccount };
 })();

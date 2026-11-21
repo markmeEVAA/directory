@@ -455,8 +455,15 @@ const GRAPH = (() => {
   // For Add: firstName, lastName, personalEmail, emailDomain ("@evaasports.org" or
   //   "@avfusion.org"), role, sportDisplayName.
   // For Remove: firstName, lastName, memberId, memberEmail, sportDisplayName.
+  //
+  // Caller identity: the signed-in user's Graph access token is sent in
+  // X-Caller-Token. The flow re-issues GET /me with that token and derives
+  // the authoritative RequestedBy from the response, ignoring any
+  // requester fields in this body. The body's requesterEmail/requesterName
+  // remain as a diagnostic hint only.
   async function createMemberRequest(payload) {
     const me = await getMe();
+    const token = await AUTH.getIdentityToken();
     const body = {
       requestType: payload.requestType,
       sportDisplayName: payload.sportDisplayName,
@@ -480,7 +487,10 @@ const GRAPH = (() => {
     };
     const resp = await fetch(SUBMIT_MEMBER_REQUEST_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-Caller-Token": token,
+      },
       body: JSON.stringify(body),
     });
     if (!resp.ok) {
@@ -507,6 +517,7 @@ const GRAPH = (() => {
 
   async function submitPasswordReset(payload) {
     const me = await getMe();
+    const token = await AUTH.getIdentityToken();
     const body = {
       requesterEmail: me?.userPrincipalName || me?.mail || "",
       requesterName: me?.displayName || "",
@@ -517,7 +528,10 @@ const GRAPH = (() => {
     };
     const resp = await fetch(SUBMIT_PASSWORD_RESET_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-Caller-Token": token,
+      },
       body: JSON.stringify(body),
     });
     if (!resp.ok) {
